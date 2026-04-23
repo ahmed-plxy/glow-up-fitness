@@ -39,19 +39,19 @@ function AuthCard({ mode, setMode, loading, onSubmit, onGoogle, error, message }
       <div className="grid lg:grid-cols-[1.1fr_0.9fr]">
         <div className="p-7 sm:p-10">
           <div className="inline-flex rounded-full border border-amber-400/20 bg-amber-400/10 px-4 py-2 text-xs font-semibold tracking-[0.2em] text-amber-200">
-            GLOW UP FITNESS • SUPABASE AUTH
+            GLOW UP FITNESS 
           </div>
           <h1 className="mt-6 text-4xl font-black leading-tight text-white sm:text-5xl">
-            صفحة الدخول شغالة الآن، وبعدها يفتح الموقع مباشرة.
+           مرحبا بك في Glpw Up Fittness 
           </h1>
           <p className="mt-4 max-w-2xl text-base leading-8 text-white/70">
-            المشروع كان يفتح الواجهة العامة فقط. الآن تسجيل الدخول متوصل بـ Supabase، والصفحات الخاصة لن تظهر إلا بعد نجاح الجلسة.
+          يمكنك تسجيل الدخول او  انشاء حساب جديد عن طريق البريد الالكتروني او جوجل
           </p>
 
           <div className="mt-8 grid gap-4 sm:grid-cols-3">
-            <Feature title="Email + Password" text="تسجيل دخول وإنشاء حساب مباشر من نفس الشاشة." />
-            <Feature title="Google OAuth" text="زر Google يفتح تسجيل الدخول الخارجي من Supabase." />
-            <Feature title="Protected App" text="الموقع الداخلي لا يظهر قبل وجود session." />
+            <Feature title="حساب احتياجك اليومي" text="يمكنك حساب احتياجك اليومي من الغذاء والسعرات حسب عمرك وجسمك" />
+            <Feature title="متابعة تقدمك الاسبوعي" text="يمكنك متالعهة تقدمك الاسبوعي عن طريق لوحة بيانات ذكية" />
+            <Feature title="تتبع شرب المياه " text="يمكنك تتبع شربك للمياه علي مدار اليوم" />
           </div>
         </div>
 
@@ -100,19 +100,19 @@ function AuthCard({ mode, setMode, loading, onSubmit, onGoogle, error, message }
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="name@example.com"
+                placeholder="email"
                 autoComplete="email"
               />
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-medium text-white/80">كلمة المرور</label>
+              <label className="mb-2 block text-sm font-medium text-white/80">كلمة السر</label>
               <input
                 className={FIELD}
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="********"
+                placeholder="كلمة السر"
                 autoComplete={mode === 'signIn' ? 'current-password' : 'new-password'}
               />
             </div>
@@ -150,11 +150,11 @@ function AuthCard({ mode, setMode, loading, onSubmit, onGoogle, error, message }
             disabled={loading}
             className="w-full rounded-2xl border border-white/10 bg-white/5 px-5 py-3.5 text-sm font-bold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            المتابعة بـ Google
+           المتابعة عن طريق  Google
           </button>
 
           <p className="mt-5 text-sm leading-7 text-white/55">
-            لازم يكون Google Provider مفعّل داخل Supabase، ومعاه Redirect URL الخاص بالمشروع.
+          © كل الحقوق محفوظة 2026
           </p>
         </div>
       </div>
