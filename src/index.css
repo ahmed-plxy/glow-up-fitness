@@ -1,0 +1,39 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply bg-brand-dark text-white font-sans antialiased;
+  background-image:
+    radial-gradient(circle at top, rgba(255,140,0,.16), transparent 28%),
+    radial-gradient(circle at bottom left, rgba(245,235,221,.10), transparent 24%),
+    linear-gradient(180deg, #0B0F14 0%, #06080b 100%);
+}
+
+.glass {
+  @apply border border-white/10 bg-white/5 backdrop-blur-xl shadow-glass;
+}
+
+.input {
+  @apply w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm outline-none transition placeholder:text-white/35 focus:border-brand-primary/70 focus:ring-2 focus:ring-brand-primary/20;
+}
+
+.label {
+  @apply mb-2 block text-sm font-medium text-brand-cream/85;
+}
+
+.card-title {
+  @apply text-lg font-semibold tracking-tight;
+}
+
+.muted {
+  @apply text-white/70;
+}
