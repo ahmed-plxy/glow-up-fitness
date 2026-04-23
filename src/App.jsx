@@ -1,10 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { supabase, supabaseConfigReady } from './supabaseClient'
 import AuthPage from './pages/AuthPage'
-import DashboardPage from './pages/DashboardPage'
-import { getTheme, setTheme } from './lib/storage'
-
-const CARD_BG = 'rounded-[1.75rem] border border-white/10 bg-white/5 shadow-2xl shadow-black/20 backdrop-blur-xl'
+import OnboardingPage from './pages/OnboardingPage'
+import MainShell from './pages/MainShell'
+import { getTheme, setTheme, loadOnboardingState, saveOnboardingState, loadProfile, saveProfile } from './lib/storage'
 
 function applyTheme(theme) {
   if (typeof document === 'undefined') return
@@ -21,7 +20,10 @@ export default function App() {
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const [theme, setThemeState] = useState(() => getTheme())
-  const [activeTab, setActiveTab] = useState('profile')
+  const [stage, setStage] = useState('auth')
+  const [initialProfile, setInitialProfile] = useState({})
+
+  const userId = useMemo(() => session?.user?.id || session?.user?.email || 'guest', [session])
 
   useEffect(() => {
     applyTheme(theme)
@@ -39,9 +41,7 @@ export default function App() {
       .getSession()
       .then(({ data, error: sessionError }) => {
         if (!mounted) return
-        if (sessionError) {
-          setError(sessionError.message)
-        }
+        if (sessionError) setError(sessionError.message)
         setSession(data.session ?? null)
       })
       .finally(() => {
@@ -58,6 +58,29 @@ export default function App() {
       listener?.subscription?.unsubscribe?.()
     }
   }, [])
+
+  useEffect(() => {
+    if (!session) {
+      setStage('auth')
+      return
+    }
+
+    const storedOnboarding = loadOnboardingState(userId, null)
+    const storedProfile = loadProfile(userId, {})
+    const completed = storedOnboarding?.onboardingCompleted || storedProfile?.onboardingCompleted
+
+    if (completed) {
+      setStage('main')
+      setInitialProfile({ ...storedProfile, ...storedOnboarding })
+    } else {
+      setStage('onboarding')
+      setInitialProfile({
+        ...storedProfile,
+        ...storedOnboarding,
+        name: storedProfile?.name || session?.user?.user_metadata?.full_name || session?.user?.user_metadata?.name || session?.user?.email?.split('@')[0] || 'مستخدم',
+      })
+    }
+  }, [session, userId])
 
   const toggleTheme = () => {
     setThemeState((current) => (current === 'dark' ? 'light' : 'dark'))
@@ -79,9 +102,7 @@ export default function App() {
             emailRedirectTo: window.location.origin,
           },
         })
-
         if (signUpError) throw signUpError
-
         if (data.session) {
           setSession(data.session)
           setMessage('تم إنشاء الحساب والدخول مباشرة.')
@@ -112,7 +133,6 @@ export default function App() {
         provider: 'google',
         options: { redirectTo: window.location.origin },
       })
-
       if (oauthError) throw oauthError
     } catch (err) {
       setError(err?.message || 'تعذر بدء تسجيل الدخول عبر جوجل.')
@@ -124,18 +144,30 @@ export default function App() {
     if (!supabase) return
     await supabase.auth.signOut()
     setSession(null)
+    setStage('auth')
     setMessage('تم تسجيل الخروج.')
-    setActiveTab('profile')
+  }
+
+  const handleOnboardingComplete = (profile) => {
+    const userKey = userId
+    saveProfile(userKey, { ...profile, onboardingCompleted: true })
+    saveOnboardingState(userKey, { ...profile, onboardingCompleted: true })
+    setInitialProfile(profile)
+    setStage('main')
+  }
+
+  const handleBackToAuth = async () => {
+    await handleLogout()
   }
 
   if (!supabaseConfigReady) {
     return (
       <div className="flex min-h-screen items-center justify-center px-4 py-10 text-white">
-        <div className={`${CARD_BG} w-full max-w-2xl p-8`}>
-          <div className="text-xs font-semibold uppercase tracking-[0.25em] text-amber-200/80">الإعدادات ناقصة</div>
+        <div className="w-full max-w-2xl rounded-[2rem] border border-white/10 bg-white/[0.05] p-8 shadow-2xl shadow-black/20 backdrop-blur-2xl">
+          <div className="text-xs font-semibold uppercase tracking-[0.25em] text-[#ffe896]/80">الإعدادات ناقصة</div>
           <h1 className="mt-4 text-3xl font-black">متغيرات الربط غير مكتملة</h1>
           <p className="mt-3 text-sm leading-7 text-white/70">
-            أضف متغيري الربط في بيئة التشغيل أو الملف المحلي: VITE_SUPABASE_URL و VITE_SUPABASE_ANON_KEY.
+            أضف VITE_SUPABASE_URL و VITE_SUPABASE_ANON_KEY في البيئة المحلية أو ملف .env.
           </p>
         </div>
       </div>
@@ -145,33 +177,40 @@ export default function App() {
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center px-4 py-10 text-white">
-        <div className={`${CARD_BG} flex w-full max-w-md items-center justify-center p-8`}>
+        <div className="flex w-full max-w-md items-center justify-center rounded-[2rem] border border-white/10 bg-white/[0.05] p-8 shadow-2xl shadow-black/20 backdrop-blur-2xl">
           <div className="animate-pulse text-lg font-bold text-white/80">جارٍ التحقق من الجلسة...</div>
         </div>
       </div>
     )
   }
 
-  return session ? (
-    <DashboardPage
-      key={session?.user?.id || 'dashboard'}
+  if (!session) {
+    return (
+      <AuthPage
+        key="auth"
+        mode={mode}
+        setMode={setMode}
+        loading={authLoading}
+        onSubmit={handleEmailAuth}
+        onGoogle={handleGoogleAuth}
+        error={error}
+        message={message}
+      />
+    )
+  }
+
+  if (stage === 'onboarding') {
+    return <OnboardingPage user={session.user} onComplete={handleOnboardingComplete} onBackToAuth={handleBackToAuth} />
+  }
+
+  return (
+    <MainShell
+      key={session?.user?.id || 'main'}
       session={session}
-      activeTab={activeTab}
-      setActiveTab={setActiveTab}
+      initialProfile={initialProfile}
+      onLogout={handleLogout}
       theme={theme}
       toggleTheme={toggleTheme}
-      onLogout={handleLogout}
-    />
-  ) : (
-    <AuthPage
-      key='auth'
-      mode={mode}
-      setMode={setMode}
-      loading={authLoading}
-      onSubmit={handleEmailAuth}
-      onGoogle={handleGoogleAuth}
-      error={error}
-      message={message}
     />
   )
 }
