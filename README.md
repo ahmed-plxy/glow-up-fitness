@@ -1,46 +1,58 @@
 # Glow Up Fitness App
 
-## What changed
-- Added a real backend with user accounts.
-- Added login/signup in the Settings page.
-- User data now syncs to the backend when you are logged in.
-- If you are not logged in, the app still works in local mode.
+A bilingual fitness dashboard with Supabase Auth, Supabase Database, and a Vercel-ready frontend.
 
-## Run locally
+## What is included
+- Email + password login
+- Google login via Supabase OAuth
+- User-specific dashboard data
+- Profile sync to Supabase
+- Weight tracking
+- Meal logging
+- Daily water tracking
+- Minimalist / corporate UI with glassmorphism
 
-### 1) Install dependencies
+## Install
 ```bash
 npm install
 ```
 
-### 2) Start the backend
+## Environment variables
+Create a `.env` file in the project root:
+
 ```bash
-npm run server
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 ```
 
-The backend runs on `http://localhost:3001`.
-
-### 3) Start the frontend
+## Run locally
 ```bash
 npm run dev
 ```
 
-The frontend usually runs on `http://localhost:5173`.
-
-## Optional: change backend URL
-Create a `.env` file:
+## Build for production
 ```bash
-VITE_API_URL=http://localhost:3001
+npm run build
 ```
 
-## Backend endpoints
-- `POST /auth/signup`
-- `POST /auth/login`
-- `GET /auth/me`
-- `GET /state`
-- `PUT /state`
+## Supabase setup
 
-## Notes
-- Passwords are hashed with bcrypt.
-- Each account gets separate saved data.
-- The backend stores data in `server/db.json` for simplicity.
+1. Create a Supabase project.
+2. Open the SQL editor.
+3. Run the file at `supabase/schema.sql`.
+4. In **Authentication -> Providers**, enable **Email** and **Google**.
+5. In **Authentication -> URL Configuration**, add:
+   - `http://localhost:5173`
+   - your Vercel domain
+6. For Google OAuth, add the Supabase callback URL in Google Cloud Console if needed.
+
+## Tables created
+- `profiles`
+- `meal_logs`
+- `weight_logs`
+- `daily_metrics`
+
+## Important notes
+- The frontend does not need a custom Node.js backend.
+- Data is protected by Row Level Security, so each user only sees their own rows.
+- Default Supabase auth emails are used for confirmation and password reset.
