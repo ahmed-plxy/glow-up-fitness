@@ -1,205 +1,282 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import {
-  Area,
   CartesianGrid,
-  ComposedChart,
   Line,
+  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
+  BarChart,
+  Bar,
 } from 'recharts'
-import { activityLevels, buildWeightSeries, formatArabicNumber, formatShortDate, genders, getLatestWeight, goals } from '../lib/fitness'
-import { CARD, FIELD, MetricCard, PageShell, cn } from '../lib/ui'
-import { addWeightEntry } from '../lib/userData'
+import { appendWeightEntry, loadProfile, loadWeightEntries, saveProfile } from '../lib/storage'
+import { GlassCard, Input, Label, Pill, SectionTitle, StatTile, Button, Select, formatDateShort } from '../components/ui'
+import { GENDER_OPTIONS, ACTIVITY_OPTIONS, formatKg, getLatestWeight } from '../lib/fitness'
 
-export default function ProfilePage({ user, profile, setProfile, weightLog, setWeightLog, onSaveProfile }) {
-  const [chartSpan, setChartSpan] = useState('weekly')
-  const [newWeight, setNewWeight] = useState(profile.weight?.toString() || '')
+function normalizeWeightEntry(entry) {
+  return {
+    date: entry.date,
+    weight: Number(entry.weight),
+    note: entry.note || '',
+  }
+}
 
-  useEffect(() => {
-    setNewWeight(profile.weight?.toString() || '')
-  }, [profile.weight])
+export default function ProfilePage({ user }) {
+  const userId = user?.id || user?.email || 'guest'
+  const email = user?.email || ''
+  const fallbackName = user?.user_metadata?.full_name || user?.user_metadata?.name || email.split('@')[0] || 'مستخدم'
 
-  const currentWeight = getLatestWeight(profile.weight, weightLog)
-  const startWeight = weightLog.length ? weightLog[0].weight : currentWeight
-  const delta = currentWeight - startWeight
-  const chartData = useMemo(() => buildWeightSeries(weightLog, chartSpan === 'weekly' ? 7 : 30), [weightLog, chartSpan])
-  const hasLogs = weightLog.length > 0
+  const [profile, setProfile] = useState(() => {
+    const stored = loadProfile(userId, {})
+    return {
+      name: stored.name || fallbackName,
+      age: stored.age || '',
+      gender: stored.gender || 'male',
+      height: stored.height || '',
+      weight: stored.weight || '',
+      activity: stored.activity || 'moderate',
+      ...stored,
+    }
+  })
 
-  const summaryCards = [
-    { label: 'الاسم', value: profile.name || '—', hint: 'الاسم الظاهر داخل الصفحة.' },
-    { label: 'البريد', value: user?.email || '—', hint: 'الحساب المرتبط بالمصادقة.' },
-    { label: 'الوزن الحالي', value: `${formatArabicNumber(currentWeight)} كجم`, hint: hasLogs ? `التغير منذ أول تسجيل: ${delta > 0 ? '+' : delta < 0 ? '-' : ''}${formatArabicNumber(Math.abs(delta))} كجم` : 'يمكنك تسجيل أول وزن الآن.' },
-    { label: 'العمر', value: profile.age ? `${formatArabicNumber(profile.age)} سنة` : '—', hint: 'يستخدم في الحسابات.' },
-  ]
+  const [weightEntries, setWeightEntries] = useState(() =>
+    loadWeightEntries(userId).map(normalizeWeightEntry),
+  )
+  const [weightInput, setWeightInput] = useState(profile.weight || '')
+  const [weightNote, setWeightNote] = useState('')
+  const [chartWindow, setChartWindow] = useState('week')
+
+  const currentWeight = useMemo(() => {
+    return getLatestWeight(weightEntries, profile.weight)
+  }, [weightEntries, profile.weight])
+
+  const previousWeight = weightEntries[1]?.weight ?? null
+  const deltaWeight =
+    previousWeight !== null && currentWeight !== ''
+      ? Number(currentWeight) - Number(previousWeight)
+      : 0
+
+  const chartData = useMemo(() => {
+    const windowSize = chartWindow === 'month' ? 30 : 7
+    return weightEntries
+      .slice(0, windowSize)
+      .map((entry) => ({
+        name: formatDateShort(entry.date),
+        الوزن: entry.weight,
+      }))
+      .reverse()
+  }, [weightEntries, chartWindow])
+
+  const weeklyData = useMemo(() => {
+    const last7 = weightEntries.slice(0, 7).reverse()
+    return last7.map((entry) => ({
+      name: formatDateShort(entry.date),
+      وزن: entry.weight,
+    }))
+  }, [weightEntries])
+
+  const saveProfileNow = (nextProfile) => {
+    setProfile(nextProfile)
+    saveProfile(userId, nextProfile)
+  }
+
+  const handleProfileChange = (field, value) => {
+    const nextProfile = { ...profile, [field]: value }
+    if (field === 'weight' && value !== '') {
+      setWeightInput(value)
+    }
+    saveProfileNow(nextProfile)
+  }
+
+  const handleAddWeight = () => {
+    const numericWeight = Number(weightInput)
+    if (!Number.isFinite(numericWeight) || numericWeight <= 0) return
+
+    const entry = {
+      date: new Date().toISOString(),
+      weight: numericWeight,
+      note: weightNote.trim(),
+    }
+
+    const next = appendWeightEntry(userId, entry).map(normalizeWeightEntry)
+    setWeightEntries(next)
+    saveProfileNow({ ...profile, weight: String(numericWeight) })
+    setWeightNote('')
+  }
 
   return (
-    <PageShell
-      title="الملف الشخصي"
-      subtitle="كل بياناتك الأساسية هنا: الاسم والعمر والبريد والوزن، مع حفظ القيم محليًا لكل حساب وواجهة تتبع بسيطة للمتابعة الأسبوعية والشهرية."
-      actions={[
-        <button key="save" type="button" onClick={onSaveProfile} className="rounded-2xl bg-amber-400 px-5 py-3 text-sm font-black text-black">
-          حفظ التغييرات
-        </button>,
-      ]}
-    >
-      <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-        <div className="grid gap-6">
-          <div className={`${CARD} p-6 sm:p-7`}>
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              {summaryCards.map((card) => (
-                <MetricCard key={card.label} {...card} />
-              ))}
-            </div>
+    <div className="space-y-6">
+      <GlassCard className="p-6 sm:p-8">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <Pill>الملف الشخصي</Pill>
+            <SectionTitle
+              title="بيانات المستخدم والمتابعة الشخصية"
+              description="هنا تظهر معلومات الحساب والوزن الحالي وسجل القياسات الأسبوعي أو الشهري."
+            />
           </div>
-
-          <div className={`${CARD} p-6 sm:p-7`}>
-            <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <label className="mb-2 block text-sm font-medium text-white/80">الاسم</label>
-                <input className={FIELD} value={profile.name} onChange={(e) => setProfile((prev) => ({ ...prev, name: e.target.value }))} placeholder="الاسم الكامل" />
-              </div>
-              <div>
-                <label className="mb-2 block text-sm font-medium text-white/80">العمر</label>
-                <input className={FIELD} type="number" min="10" max="100" value={profile.age} onChange={(e) => setProfile((prev) => ({ ...prev, age: e.target.value }))} placeholder="العمر" />
-              </div>
-              <div>
-                <label className="mb-2 block text-sm font-medium text-white/80">الوزن الحالي</label>
-                <input className={FIELD} type="number" min="20" max="300" step="0.1" value={profile.weight} onChange={(e) => setProfile((prev) => ({ ...prev, weight: e.target.value }))} placeholder="كجم" />
-              </div>
-              <div>
-                <label className="mb-2 block text-sm font-medium text-white/80">الطول</label>
-                <input className={FIELD} type="number" min="100" max="230" value={profile.height} onChange={(e) => setProfile((prev) => ({ ...prev, height: e.target.value }))} placeholder="سم" />
-              </div>
-              <div>
-                <label className="mb-2 block text-sm font-medium text-white/80">النوع</label>
-                <select className={FIELD} value={profile.gender} onChange={(e) => setProfile((prev) => ({ ...prev, gender: e.target.value }))}>
-                  {genders.map((item) => (
-                    <option key={item.value} value={item.value} className="text-black">
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="mb-2 block text-sm font-medium text-white/80">مستوى النشاط</label>
-                <select className={FIELD} value={profile.activity} onChange={(e) => setProfile((prev) => ({ ...prev, activity: e.target.value }))}>
-                  {activityLevels.map((item) => (
-                    <option key={item.value} value={item.value} className="text-black">
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="md:col-span-2">
-                <label className="mb-2 block text-sm font-medium text-white/80">الهدف</label>
-                <div className="grid gap-3 sm:grid-cols-3">
-                  {goals.map((goal) => (
-                    <button
-                      key={goal.value}
-                      type="button"
-                      onClick={() => setProfile((prev) => ({ ...prev, goal: goal.value }))}
-                      className={cn(
-                        'rounded-2xl border px-4 py-4 text-right text-sm font-bold transition',
-                        profile.goal === goal.value ? 'border-amber-400/40 bg-amber-400/15 text-amber-100' : 'border-white/10 bg-white/6 text-white/75 hover:bg-white/10',
-                      )}
-                    >
-                      <div className="text-base">{goal.label}</div>
-                      <div className="mt-1 text-xs font-medium leading-6 text-white/55">
-                        {goal.value === 'ضخامة' ? 'زيادة محسوبة في السعرات.' : goal.value === 'تنشيف' ? 'خفض مع الحفاظ على العضلات.' : 'عجز واضح للوصول للوزن.'}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className={`${CARD} p-6 sm:p-7`}>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <div className="text-lg font-black text-white">تسجيل الوزن</div>
-                <div className="mt-2 text-sm leading-7 text-white/65">كل إدخال جديد يظهر داخل الرسم البياني ويحدث الوزن الحالي تلقائيًا.</div>
-              </div>
-              <div className="flex gap-3">
-                <button type="button" onClick={() => setChartSpan('weekly')} className={cn('rounded-full px-4 py-2 text-sm font-bold transition', chartSpan === 'weekly' ? 'bg-amber-400 text-black' : 'border border-white/10 bg-white/6 text-white/70')}>
-                  أسبوعي
-                </button>
-                <button type="button" onClick={() => setChartSpan('monthly')} className={cn('rounded-full px-4 py-2 text-sm font-bold transition', chartSpan === 'monthly' ? 'bg-amber-400 text-black' : 'border border-white/10 bg-white/6 text-white/70')}>
-                  شهري
-                </button>
-              </div>
-            </div>
-
-            <div className="mt-5 grid gap-4 sm:grid-cols-[1fr_auto]">
-              <input className={FIELD} type="number" min="20" max="300" step="0.1" value={newWeight} onChange={(e) => setNewWeight(e.target.value)} placeholder="أدخل وزنك الحالي بالكيلو" />
-              <button
-                type="button"
-                onClick={() => {
-                  if (!newWeight) return
-                  const next = addWeightEntry(user.id, Number(newWeight))
-                  setWeightLog([...next])
-                  setProfile((prev) => ({ ...prev, weight: Number(newWeight) }))
-                }}
-                className="rounded-2xl bg-white px-5 py-3.5 text-sm font-black text-black"
-              >
-                تسجيل
-              </button>
-            </div>
-
-            <div className="mt-6 h-80 rounded-[1.75rem] border border-white/10 bg-black/20 p-3 sm:p-4">
-              {chartData.some((item) => item.الوزن !== null) ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={chartData} margin={{ top: 15, right: 10, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,.08)" />
-                    <XAxis dataKey="date" tickFormatter={formatShortDate} stroke="rgba(255,255,255,.5)" tickMargin={10} />
-                    <YAxis stroke="rgba(255,255,255,.5)" tickFormatter={(v) => `${v}`} domain={["dataMin - 2", "dataMax + 2"]} />
-                    <Tooltip
-                      contentStyle={{
-                        background: 'rgba(10, 12, 18, .92)',
-                        border: '1px solid rgba(255,255,255,.08)',
-                        borderRadius: '18px',
-                        color: '#fff',
-                      }}
-                      labelFormatter={(label) => formatShortDate(label)}
-                      formatter={(value) => [`${formatArabicNumber(value)} كجم`, 'الوزن']}
-                    />
-                    <Area type="monotone" dataKey="الوزن" fill="rgba(255, 140, 0, .12)" stroke="none" />
-                    <Line type="monotone" dataKey="الوزن" stroke="rgba(255, 140, 0, .95)" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="flex h-full items-center justify-center text-sm text-white/55">أضف أول تسجيل للوزن حتى يظهر الرسم البياني.</div>
-              )}
-            </div>
+          <div className="rounded-3xl border border-white/10 bg-black/20 px-5 py-4 text-right">
+            <div className="text-xs font-semibold uppercase tracking-[0.24em] text-white/45">البريد المرتبط</div>
+            <div className="mt-2 text-base font-bold text-white">{email}</div>
           </div>
         </div>
+      </GlassCard>
 
-        <div className="grid gap-6">
-          <div className={`${CARD} p-6 sm:p-7`}>
-            <div className="text-lg font-black text-white">مراجعة سريعة</div>
-            <div className="mt-4 space-y-3 text-sm leading-7 text-white/70">
-              <div className="flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-black/15 px-4 py-3"><span>الجلسة</span><span className="font-bold text-white">{user?.email ? 'نشطة' : '—'}</span></div>
-              <div className="flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-black/15 px-4 py-3"><span>آخر تحديث</span><span className="font-bold text-white">{weightLog.length ? formatShortDate(weightLog[weightLog.length - 1].date) : '—'}</span></div>
-              <div className="flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-black/15 px-4 py-3"><span>عدد السجلات</span><span className="font-bold text-white">{formatArabicNumber(weightLog.length)}</span></div>
+      <div className="grid gap-6 lg:grid-cols-[1fr_1.05fr]">
+        <GlassCard className="p-6 sm:p-8">
+          <SectionTitle title="البيانات الأساسية" description="غيّر الاسم والعمر والطول والنوع ومستوى النشاط، وسيتم حفظها محليًا لهذا الحساب." />
+          <div className="mt-6 grid gap-4 sm:grid-cols-2">
+            <div>
+              <Label>الاسم</Label>
+              <Input value={profile.name} onChange={(e) => handleProfileChange('name', e.target.value)} />
+            </div>
+            <div>
+              <Label>العمر</Label>
+              <Input type="number" min="1" value={profile.age} onChange={(e) => handleProfileChange('age', e.target.value)} />
+            </div>
+            <div>
+              <Label>الطول (سم)</Label>
+              <Input type="number" min="1" value={profile.height} onChange={(e) => handleProfileChange('height', e.target.value)} />
+            </div>
+            <div>
+              <Label>النوع</Label>
+              <Select value={profile.gender} onChange={(e) => handleProfileChange('gender', e.target.value)}>
+                {GENDER_OPTIONS.map((item) => (
+                  <option key={item.value} value={item.value}>{item.label}</option>
+                ))}
+              </Select>
+            </div>
+            <div className="sm:col-span-2">
+              <Label>مستوى النشاط</Label>
+              <Select value={profile.activity} onChange={(e) => handleProfileChange('activity', e.target.value)}>
+                {ACTIVITY_OPTIONS.map((item) => (
+                  <option key={item.value} value={item.value}>{item.label}</option>
+                ))}
+              </Select>
             </div>
           </div>
+        </GlassCard>
 
-          <div className={`${CARD} p-6 sm:p-7`}>
-            <div className="text-lg font-black text-white">آخر السجلات</div>
-            <div className="mt-4 space-y-3">
-              {weightLog.slice(-5).reverse().map((entry) => (
-                <div key={`${entry.date}-${entry.weight}`} className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/15 px-4 py-3 text-sm text-white/75">
-                  <span>{formatShortDate(entry.date)}</span>
-                  <span className="font-bold text-white">{formatArabicNumber(entry.weight)} كجم</span>
-                </div>
-              ))}
-              {!weightLog.length ? <div className="rounded-2xl border border-dashed border-white/10 px-4 py-6 text-sm text-white/55">لا توجد سجلات حتى الآن.</div> : null}
-            </div>
-          </div>
+        <div className="space-y-6">
+          <StatTile
+            label="الوزن الحالي"
+            value={currentWeight ? formatKg(currentWeight) : '—'}
+            hint={
+              previousWeight !== null && currentWeight !== ''
+                ? `آخر تغيير: ${deltaWeight > 0 ? '+' : ''}${deltaWeight.toFixed(1)} كجم مقارنةً بالسجل السابق.`
+                : 'أضف أول سجل للوزن لبدء التتبع.'
+            }
+          />
+          <StatTile
+            label="عدد السجلات"
+            value={`${weightEntries.length}`}
+            hint="كل سجل يظل محفوظًا لهذا الحساب داخل المتصفح."
+          />
         </div>
       </div>
-    </PageShell>
+
+      <div className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
+        <GlassCard className="p-6 sm:p-8">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <SectionTitle title="لوحة تتبع الوزن" description="اختر الأسبوع أو الشهر لمشاهدة التغيّر بصورة أوضح." />
+            <div className="flex rounded-full border border-white/10 bg-white/5 p-1 text-sm font-semibold text-white/70">
+              <button
+                type="button"
+                onClick={() => setChartWindow('week')}
+                className={`rounded-full px-4 py-2 ${chartWindow === 'week' ? 'bg-amber-400 text-black' : ''}`}
+              >
+                أسبوعي
+              </button>
+              <button
+                type="button"
+                onClick={() => setChartWindow('month')}
+                className={`rounded-full px-4 py-2 ${chartWindow === 'month' ? 'bg-amber-400 text-black' : ''}`}
+              >
+                شهري
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-6 h-80">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                <XAxis dataKey="name" stroke="rgba(255,255,255,0.5)" />
+                <YAxis stroke="rgba(255,255,255,0.5)" />
+                <Tooltip
+                  contentStyle={{
+                    background: 'rgba(10, 14, 20, 0.95)',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    borderRadius: '16px',
+                    color: 'white',
+                  }}
+                />
+                <Line type="monotone" dataKey="الوزن" stroke="#F5EBDD" strokeWidth={3} dot={{ r: 4 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </GlassCard>
+
+        <GlassCard className="p-6 sm:p-8">
+          <SectionTitle title="إضافة قياس جديد" description="دوّن الوزن الحالي ليُضاف إلى الخلاصة والرسوم فورًا." />
+          <div className="mt-6 space-y-4">
+            <div>
+              <Label>الوزن الحالي</Label>
+              <Input type="number" min="1" step="0.1" value={weightInput} onChange={(e) => setWeightInput(e.target.value)} />
+            </div>
+            <div>
+              <Label>ملاحظة</Label>
+              <Input value={weightNote} onChange={(e) => setWeightNote(e.target.value)} placeholder="مثال: بعد التمرين" />
+            </div>
+            <Button className="w-full" onClick={handleAddWeight}>
+              حفظ القياس
+            </Button>
+          </div>
+
+          <div className="mt-6 rounded-[1.75rem] border border-white/10 bg-black/20 p-5">
+            <div className="text-xs font-semibold uppercase tracking-[0.22em] text-white/45">آخر السجلات</div>
+            <div className="mt-4 space-y-3">
+              {weightEntries.slice(0, 5).map((entry) => (
+                <div key={`${entry.date}-${entry.weight}`} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-sm font-bold text-white">{formatDateShort(entry.date)}</div>
+                    <div className="text-sm font-black text-amber-100">{formatKg(entry.weight)}</div>
+                  </div>
+                  {entry.note ? <div className="mt-2 text-sm leading-6 text-white/60">{entry.note}</div> : null}
+                </div>
+              ))}
+              {weightEntries.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-white/10 px-4 py-5 text-sm text-white/55">
+                  لا توجد قياسات بعد.
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </GlassCard>
+      </div>
+
+      <GlassCard className="p-6 sm:p-8">
+        <SectionTitle title="ملخص الحركة" description="مخطط بسيط يوضح القياسات المسجلة خلال الفترة الأخيرة." />
+        <div className="mt-6 h-72">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={weeklyData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+              <XAxis dataKey="name" stroke="rgba(255,255,255,0.5)" />
+              <YAxis stroke="rgba(255,255,255,0.5)" />
+              <Tooltip
+                contentStyle={{
+                  background: 'rgba(10, 14, 20, 0.95)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: '16px',
+                  color: 'white',
+                }}
+              />
+              <Bar dataKey="وزن" radius={[14, 14, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </GlassCard>
+    </div>
   )
 }
