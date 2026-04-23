@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
+import { createClient } from '@supabase/supabase-js'
 import { motion } from 'framer-motion'
 import {
   CartesianGrid,
@@ -10,1258 +11,1437 @@ import {
   YAxis,
 } from 'recharts'
 
-const STORAGE_KEY = 'glow-up-fitness-data-v4'
-const LEGACY_STORAGE_KEY = 'glow-up-fitness-v3'
-const SETTINGS_KEY = 'glow-up-fitness-settings-v4'
-const LEGACY_SETTINGS_KEY = 'glow-up-fitness-settings-v3'
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim()
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim()
+const supabase = supabaseUrl && supabaseAnonKey ? createClient(supabaseUrl, supabaseAnonKey) : null
+
+const STORAGE_THEME = 'glow-up-theme-v6'
+const STORAGE_LANG = 'glow-up-lang-v6'
+const STORAGE_PAGE = 'glow-up-page-v6'
+
+const PAGES = ['home', 'dashboard', 'progress', 'settings']
 
 const ACTIVITY_LEVELS = [
-  { value: 'sedentary', ar: 'قليل جدًا', en: 'Sedentary', factor: 1.2 },
-  { value: 'moderate', ar: 'متوسط', en: 'Moderate', factor: 1.55 },
-  { value: 'athletic', ar: 'عالي', en: 'Athletic', factor: 1.725 },
+  { value: 'sedentary', label: { ar: 'قليل جدًا', en: 'Sedentary' }, factor: 1.2 },
+  { value: 'moderate', label: { ar: 'متوسط', en: 'Moderate' }, factor: 1.55 },
+  { value: 'athletic', label: { ar: 'عالي', en: 'Athletic' }, factor: 1.725 },
 ]
 
 const GOALS = [
-  { value: 'lose', ar: 'خسارة وزن', en: 'Lose weight', adjust: -300 },
-  { value: 'maintain', ar: 'ثبات', en: 'Maintain', adjust: 0 },
-  { value: 'gain', ar: 'زيادة عضلية', en: 'Gain muscle', adjust: 250 },
+  { value: 'lose', label: { ar: 'خسارة وزن', en: 'Lose weight' }, adjust: -300 },
+  { value: 'maintain', label: { ar: 'ثبات', en: 'Maintain' }, adjust: 0 },
+  { value: 'gain', label: { ar: 'زيادة عضلية', en: 'Gain muscle' }, adjust: 250 },
 ]
 
 const QUICK_MEALS = [
-  { id: 'q1', ar: 'سموزي بروتين', en: 'Protein smoothie', calories: 420, protein: 28, carbs: 48, fat: 12 },
-  { id: 'q2', ar: 'وجبة غداء', en: 'Lunch bowl', calories: 760, protein: 45, carbs: 78, fat: 24 },
-  { id: 'q3', ar: 'سناك خفيف', en: 'Light snack', calories: 230, protein: 8, carbs: 10, fat: 18 },
+  { name: { ar: 'سموزي بروتين', en: 'Protein smoothie' }, calories: 420, protein: 28, carbs: 48, fat: 12 },
+  { name: { ar: 'وجبة غداء', en: 'Lunch bowl' }, calories: 760, protein: 45, carbs: 78, fat: 24 },
+  { name: { ar: 'سناك خفيف', en: 'Light snack' }, calories: 230, protein: 8, carbs: 10, fat: 18 },
 ]
 
-const DEFAULT_PROFILE = {
-  name: 'Glow User',
+const DEFAULT_PROFILE_FORM = {
+  full_name: '',
   gender: 'male',
   age: 27,
-  height: 178,
-  weight: 78,
-  goalWeight: 74,
-  activity: 'moderate',
-  goal: 'maintain',
+  height_cm: 178,
+  weight_kg: 78,
+  goal_weight_kg: 74,
+  activity_level: 'moderate',
+  goal_type: 'maintain',
 }
 
-const DEFAULT_MACROS = {
-  protein: 170,
-  carbs: 260,
-  fat: 70,
+const DEFAULT_AUTH_FORM = {
+  email: '',
+  password: '',
+  full_name: '',
 }
 
-const PAGE_ORDER = ['home', 'dashboard', 'progress', 'settings']
-
-function makeId() {
-  return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`
+const DEFAULT_MEAL_FORM = {
+  meal_name: '',
+  calories: '',
+  protein: '',
+  carbs: '',
+  fat: '',
+  log_date: new Date().toISOString().slice(0, 10),
 }
 
-function todayKey(date = new Date()) {
-  return date.toISOString().slice(0, 10)
+const DEFAULT_WEIGHT_FORM = {
+  weight_kg: '',
+  log_date: new Date().toISOString().slice(0, 10),
 }
 
-function formatDate(dateKey, lang) {
-  return new Date(`${dateKey}T12:00:00`).toLocaleDateString(lang === 'ar' ? 'ar-EG' : 'en-US', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-  })
+const strings = {
+  ar: {
+    brand: 'Glow Up',
+    hero_badge: 'منصة لياقة عصرية بربط حقيقي مع Supabase',
+    hero_title: 'واجهة ناعمة، حسابات حقيقية، وتجربة موبايل أولًا',
+    hero_desc:
+      'سجل بحسابك، خزن بياناتك بشكل منفصل، تابع الوزن والوجبات والماء، وكل شيء يزامن تلقائيًا مع Supabase.',
+    open_dashboard: 'افتح اللوحة',
+    sign_in: 'تسجيل دخول',
+    sign_up: 'إنشاء حساب',
+    google: 'المتابعة بـ Google',
+    email: 'البريد الإلكتروني',
+    password: 'كلمة المرور',
+    full_name: 'الاسم الكامل',
+    auth_hint: 'يعتمد النظام على Supabase Auth الافتراضي للتأكيد واسترجاع كلمة المرور.',
+    auth_ready: 'اتصال Supabase جاهز',
+    auth_missing: 'أضف مفاتيح Supabase في ملف .env',
+    logout: 'تسجيل خروج',
+    save: 'حفظ',
+    cancel: 'إلغاء',
+    profile: 'الملف الشخصي',
+    dashboard: 'لوحة التحكم',
+    progress: 'التقدم',
+    settings: 'الإعدادات',
+    home: 'الرئيسية',
+    calories_today: 'سعرات اليوم',
+    remaining: 'المتبقي',
+    water_today: 'الماء اليوم',
+    target: 'الهدف',
+    weight: 'الوزن',
+    latest_weight: 'آخر وزن',
+    bmr: 'BMR',
+    tdee: 'TDEE',
+    update_profile: 'تحديث البيانات',
+    add_weight: 'إضافة وزن',
+    log_meal: 'إضافة وجبة',
+    meal_name: 'اسم الوجبة',
+    meal_date: 'تاريخ الوجبة',
+    meal_calories: 'السعرات',
+    meal_protein: 'بروتين',
+    meal_carbs: 'كارب',
+    meal_fat: 'دهون',
+    meal_history: 'سجل الوجبات',
+    weight_history: 'سجل الوزن',
+    add_water: 'إضافة كوب ماء',
+    remove_water: 'حذف كوب ماء',
+    no_meals: 'لا توجد وجبات مسجلة بعد.',
+    no_weights: 'لا توجد بيانات وزن بعد.',
+    quick_add: 'إضافة سريعة',
+    quick_note: 'تنبيه سريع',
+    profile_card: 'ملخص الحساب',
+    theme: 'المظهر',
+    language: 'اللغة',
+    light: 'فاتح',
+    dark: 'داكن',
+    connection_ok: 'الاتصال بالخادم نشط',
+    setup_needed: 'إعداد Supabase غير مكتمل',
+    save_success: 'تم الحفظ بنجاح.',
+    auth_success: 'تم تسجيل الدخول.',
+    signup_success: 'تم إنشاء الحساب.',
+    google_note: 'فعّل Google Provider من إعدادات Supabase قبل الاستخدام.',
+    weekly_progress: 'تقدم الأسبوع',
+    last_7_days: 'آخر 7 أيام',
+    water_target: 'هدف الماء',
+    calories_target: 'هدف السعرات',
+    start_tracking: 'ابدأ التتبع الآن',
+  },
+  en: {
+    brand: 'Glow Up',
+    hero_badge: 'Modern fitness platform with real Supabase sync',
+    hero_title: 'Soft UI, real accounts, mobile-first experience',
+    hero_desc:
+      'Sign in, keep data separate per user, track weight, meals, and water, and sync everything to Supabase automatically.',
+    open_dashboard: 'Open dashboard',
+    sign_in: 'Sign in',
+    sign_up: 'Sign up',
+    google: 'Continue with Google',
+    email: 'Email',
+    password: 'Password',
+    full_name: 'Full name',
+    auth_hint: 'This uses Supabase Auth defaults for verification and password reset.',
+    auth_ready: 'Supabase connection ready',
+    auth_missing: 'Add Supabase keys in .env',
+    logout: 'Log out',
+    save: 'Save',
+    cancel: 'Cancel',
+    profile: 'Profile',
+    dashboard: 'Dashboard',
+    progress: 'Progress',
+    settings: 'Settings',
+    home: 'Home',
+    calories_today: 'Calories today',
+    remaining: 'Remaining',
+    water_today: 'Water today',
+    target: 'Target',
+    weight: 'Weight',
+    latest_weight: 'Latest weight',
+    bmr: 'BMR',
+    tdee: 'TDEE',
+    update_profile: 'Update profile',
+    add_weight: 'Add weight',
+    log_meal: 'Add meal',
+    meal_name: 'Meal name',
+    meal_date: 'Meal date',
+    meal_calories: 'Calories',
+    meal_protein: 'Protein',
+    meal_carbs: 'Carbs',
+    meal_fat: 'Fat',
+    meal_history: 'Meal history',
+    weight_history: 'Weight history',
+    add_water: 'Add water cup',
+    remove_water: 'Remove water cup',
+    no_meals: 'No meals logged yet.',
+    no_weights: 'No weight entries yet.',
+    quick_add: 'Quick add',
+    quick_note: 'Quick note',
+    profile_card: 'Account summary',
+    theme: 'Theme',
+    language: 'Language',
+    light: 'Light',
+    dark: 'Dark',
+    connection_ok: 'Connected to backend',
+    setup_needed: 'Supabase setup missing',
+    save_success: 'Saved successfully.',
+    auth_success: 'Signed in successfully.',
+    signup_success: 'Account created successfully.',
+    google_note: 'Enable the Google provider in Supabase before using this button.',
+    weekly_progress: 'Weekly progress',
+    last_7_days: 'Last 7 days',
+    water_target: 'Water target',
+    calories_target: 'Calories target',
+    start_tracking: 'Start tracking now',
+  },
 }
 
-function loadJson(key, fallback) {
-  if (typeof window === 'undefined') return fallback
-  try {
-    const raw = localStorage.getItem(key)
-    return raw ? JSON.parse(raw) : fallback
-  } catch {
-    return fallback
-  }
-}
+const today = () => new Date().toISOString().slice(0, 10)
 
-function clamp(value, min, max) {
-  return Math.min(max, Math.max(min, value))
-}
-
-function round(value) {
-  return Math.round(Number(value) || 0)
-}
-
-function safeNumber(value, fallback = 0) {
+const toNumber = (value, fallback = 0) => {
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : fallback
 }
 
-function getBmr(profile) {
-  const weight = Number(profile.weight)
-  const height = Number(profile.height)
-  const age = Number(profile.age)
-  const base = 10 * weight + 6.25 * height - 5 * age
-  return profile.gender === 'female' ? base - 161 : base + 5
+const formatDate = (value, lang) => {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat(lang === 'ar' ? 'ar-EG' : 'en-US', {
+    month: 'short',
+    day: 'numeric',
+  }).format(date)
 }
 
-function getGoal(goalValue) {
-  return GOALS.find((goal) => goal.value === goalValue) ?? GOALS[1]
+const calcBmr = (profile) => {
+  const age = toNumber(profile.age)
+  const height = toNumber(profile.height_cm)
+  const weight = toNumber(profile.weight_kg)
+  const isFemale = profile.gender === 'female'
+  return Math.round(isFemale ? 10 * weight + 6.25 * height - 5 * age - 161 : 10 * weight + 6.25 * height - 5 * age + 5)
 }
 
-function getActivity(activityValue) {
-  return ACTIVITY_LEVELS.find((level) => level.value === activityValue) ?? ACTIVITY_LEVELS[1]
+const calcTargets = (profile) => {
+  const bmr = calcBmr(profile)
+  const activity = ACTIVITY_LEVELS.find((item) => item.value === profile.activity_level)?.factor ?? 1.55
+  const adjust = GOALS.find((item) => item.value === profile.goal_type)?.adjust ?? 0
+  const tdee = Math.round(bmr * activity)
+  const calories_target = Math.max(1200, Math.round(tdee + adjust))
+  const water_target_cups = Math.max(6, Math.round(toNumber(profile.weight_kg) / 10))
+  return { bmr, tdee, calories_target, water_target_cups }
 }
 
-function loadState() {
-  const stored = loadJson(STORAGE_KEY, loadJson(LEGACY_STORAGE_KEY, null))
-
-  if (!stored) {
-    const seedDate = todayKey()
-    return {
-      profile: DEFAULT_PROFILE,
-      macros: DEFAULT_MACROS,
-      meals: [],
-      weights: [{ id: makeId(), date: seedDate, weight: DEFAULT_PROFILE.weight }],
-      water: [{ id: makeId(), date: seedDate, amount: 300 }],
-    }
+const cloneProfile = (profile, email, userMeta) => {
+  const fullName = profile?.full_name ?? userMeta?.full_name ?? userMeta?.name ?? ''
+  const base = {
+    ...DEFAULT_PROFILE_FORM,
+    ...profile,
+    full_name: fullName,
+    email: email ?? profile?.email ?? '',
   }
-
+  const targets = calcTargets(base)
   return {
-    profile: { ...DEFAULT_PROFILE, ...(stored.profile ?? {}) },
-    macros: { ...DEFAULT_MACROS, ...(stored.macros ?? {}) },
-    meals: Array.isArray(stored.meals) ? stored.meals : [],
-    weights: Array.isArray(stored.weights) ? stored.weights : [],
-    water: Array.isArray(stored.water) ? stored.water : [],
+    ...base,
+    ...targets,
   }
 }
 
-const translations = {
-  ar: {
-    nav: {
-      brand: 'Glow Up',
-      home: 'الرئيسية',
-      dashboard: 'لوحة التحكم',
-      progress: 'التقدم',
-      settings: 'الإعدادات',
-      cta: 'ابدأ الآن',
-    },
-    hero: {
-      badge: 'منصة عربية / إنجليزية لتتبع اللياقة بشكل عملي',
-      title: 'موقع أنظف، أخف، ومقسّم بطريقة تفهمها بسرعة',
-      description:
-        'الصفحة الأساسية هنا تقدم الفكرة بوضوح، واللوحة تتولى كل الأدوات اليومية: تسجيل الوجبات، الماء، الوزن، والاتجاه الأسبوعي — بدون زحمة أو كلام زائد.',
-      primary: 'استعرض الصفحة',
-      secondary: 'افتح اللوحة',
-      stats: [
-        ['هدف يومي', 'حسابات ذكية'],
-        ['تتبع أسبوعي', 'اتجاه واضح'],
-        ['لغة كاملة', 'AR / EN'],
-      ],
-    },
-    home: {
-      title: 'كيف يستخدمه الزائر؟',
-      description: 'ثلاث خطوات فقط توصل المستخدم للفكرة مباشرة من غير ما يتوه وسط عناصر شكلية.',
-      cards: [
-        ['اختر الهدف', 'خسارة، ثبات، أو زيادة حسب احتياجك الحقيقي.'],
-        ['سجّل يومك', 'وجبات، ماء، ووزن من مكان واحد.'],
-        ['راقب الاتجاه', 'شوف الأسبوع كله بدل رقم يوم واحد.'],
-      ],
-    },
-    dashboard: {
-      title: 'لوحة التحكم',
-      description: 'المكان الفعلي لإدارة البيانات اليومية والتعديل عليها بسرعة.',
-      caloriesToday: 'سعرات اليوم',
-      remaining: 'المتبقي',
-      waterToday: 'أكواب الماء',
-      macros: 'الماكروز',
-      protein: 'بروتين',
-      carbs: 'كارب',
-      fat: 'دهون',
-      quickAdd: 'إضافة سريعة',
-      customMeal: 'وجبة مخصصة',
-      mealName: 'اسم الوجبة',
-      addMeal: 'إضافة وجبة',
-      updateMeal: 'تحديث الوجبة',
-      cancel: 'إلغاء',
-      mealHistory: 'الوجبات المسجلة',
-      edit: 'تعديل',
-      remove: 'حذف',
-      reset: 'تصفير',
-      water: 'الماء',
-      addWater: 'إضافة كوب',
-      weightLog: 'سجل الوزن',
-      addWeight: 'إضافة وزن',
-      updateWeight: 'تحديث الوزن',
-      smartNote: 'تنبيه سريع',
-      noteA: 'أنت قريب جدًا من الهدف اليوم.',
-      noteB: 'السعرات أعلى من الخطة قليلًا، راجع الوجبة التالية.',
-      noteC: 'لسه عندك مساحة جيدة لوجبة إضافية.',
-      emptyMeals: 'لا توجد وجبات مسجلة بعد.',
-    },
-    progress: {
-      title: 'التقدم الأسبوعي',
-      description: 'عرض مبسط لاتجاه الوزن والسعرات والماء خلال آخر 7 أيام.',
-      trend: 'الاتجاه العام',
-      latestWeight: 'آخر وزن',
-      todayWater: 'ماء اليوم',
-      empty: 'لا توجد بيانات كافية بعد — أضف شيئًا اليوم.',
-      weight: 'الوزن',
-      calories: 'السعرات',
-      water: 'الماء (لتر)',
-    },
-    settings: {
-      title: 'الإعدادات والملف الشخصي',
-      description: 'الملف هنا منفصل عن المحتوى الرئيسي، وفيه الهدف والبيانات الأساسية فقط.',
-      name: 'الاسم',
-      gender: 'النوع',
-      age: 'العمر',
-      height: 'الطول (سم)',
-      weight: 'الوزن (كجم)',
-      goalWeight: 'الوزن المستهدف',
-      activity: 'النشاط',
-      goal: 'الهدف',
-      save: 'حفظ البيانات',
-      theme: 'المظهر',
-      language: 'اللغة',
-      profileCard: 'ملخص سريع',
-      caloriesTarget: 'السعرات المستهدفة',
-      waterTarget: 'الماء اليومي',
-      bmr: 'معدل الحرق',
-      tdee: 'الاحتياج اليومي',
-    },
-    footer: {
-      note: 'Glow Up مبني كتجربة واضحة: أقسام قليلة ومفيدة، ولوحة فعّالة، وصفحة رئيسية أخف.',
-      rights: 'جميع الحقوق محفوظة',
-    },
-  },
-  en: {
-    nav: {
-      brand: 'Glow Up',
-      home: 'Home',
-      dashboard: 'Dashboard',
-      progress: 'Progress',
-      settings: 'Settings',
-      cta: 'Get started',
-    },
-    hero: {
-      badge: 'A bilingual fitness platform with a clear structure',
-      title: 'A cleaner site, lighter layout, and faster understanding',
-      description:
-        'The home page explains the idea fast, while the dashboard handles the daily work: meals, water, weight, and weekly direction — without visual noise.',
-      primary: 'Explore home',
-      secondary: 'Open dashboard',
-      stats: [
-        ['Daily target', 'Smart calculations'],
-        ['Weekly view', 'Clear direction'],
-        ['Full language', 'AR / EN'],
-      ],
-    },
-    home: {
-      title: 'How a visitor uses it',
-      description: 'Three simple steps that make the product understandable right away.',
-      cards: [
-        ['Pick a goal', 'Lose, maintain, or gain according to your real needs.'],
-        ['Log your day', 'Meals, water, and weight in one place.'],
-        ['Watch the trend', 'See the week instead of one noisy day.'],
-      ],
-    },
-    dashboard: {
-      title: 'Dashboard',
-      description: 'The real place for daily tracking and quick edits.',
-      caloriesToday: 'Calories today',
-      remaining: 'Remaining',
-      waterToday: 'Water cups',
-      macros: 'Macros',
-      protein: 'Protein',
-      carbs: 'Carbs',
-      fat: 'Fat',
-      quickAdd: 'Quick add',
-      customMeal: 'Custom meal',
-      mealName: 'Meal name',
-      addMeal: 'Add meal',
-      updateMeal: 'Update meal',
-      cancel: 'Cancel',
-      mealHistory: 'Logged meals',
-      edit: 'Edit',
-      remove: 'Delete',
-      reset: 'Reset',
-      water: 'Water',
-      addWater: 'Add cup',
-      weightLog: 'Weight log',
-      addWeight: 'Add weight',
-      updateWeight: 'Update weight',
-      smartNote: 'Quick note',
-      noteA: 'You are very close to today’s target.',
-      noteB: 'Calories are a little high — review the next meal.',
-      noteC: 'There is still room for one more meal.',
-      emptyMeals: 'No meals logged yet.',
-    },
-    progress: {
-      title: 'Weekly progress',
-      description: 'A simple view of weight, calories, and water over the last 7 days.',
-      trend: 'Overall trend',
-      latestWeight: 'Latest weight',
-      todayWater: 'Today water',
-      empty: 'Not enough data yet — add something today.',
-      weight: 'Weight',
-      calories: 'Calories',
-      water: 'Water (L)',
-    },
-    settings: {
-      title: 'Settings and profile',
-      description: 'The profile is separated from the main content and contains only the essentials.',
-      name: 'Name',
-      gender: 'Gender',
-      age: 'Age',
-      height: 'Height (cm)',
-      weight: 'Weight (kg)',
-      goalWeight: 'Goal weight',
-      activity: 'Activity',
-      goal: 'Goal',
-      save: 'Save data',
-      theme: 'Theme',
-      language: 'Language',
-      profileCard: 'Quick summary',
-      caloriesTarget: 'Target calories',
-      waterTarget: 'Daily water',
-      bmr: 'BMR',
-      tdee: 'TDEE',
-    },
-    footer: {
-      note: 'Glow Up is built as a clear experience: fewer sections, more use, and a cleaner main page.',
-      rights: 'All rights reserved',
-    },
-  },
-}
+const Field = ({ label, children, hint }) => (
+  <label className="block">
+    <span className="label text-white/70 dark:text-white/70 text-slate-600">{label}</span>
+    {children}
+    {hint ? <span className="mt-2 block text-xs text-white/45 dark:text-white/45 text-slate-500">{hint}</span> : null}
+  </label>
+)
 
-function ThemePill({ active, children, onClick, theme }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded-full px-3 py-1.5 text-xs font-bold transition ${
-        active
-          ? 'bg-brand-primary text-black'
-          : theme === 'dark'
-            ? 'border border-white/10 bg-white/5 text-white/75 hover:bg-white/10'
-            : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-100'
-      }`}
-    >
-      {children}
-    </button>
-  )
-}
-
-function SectionHeading({ eyebrow, title, description, theme }) {
-  const muted = theme === 'dark' ? 'text-white/65' : 'text-slate-600'
-  return (
-    <div className="max-w-3xl">
-      <div className="text-xs font-bold uppercase tracking-[0.35em] text-brand-primary">{eyebrow}</div>
-      <h2 className={`mt-3 text-2xl font-black sm:text-3xl ${theme === 'dark' ? 'text-white' : 'text-slate-900'}`}>{title}</h2>
-      <p className={`mt-3 text-sm leading-7 sm:text-base ${muted}`}>{description}</p>
-    </div>
-  )
-}
-
-function MetricCard({ label, value, theme, accent = false }) {
-  return (
-    <div className={`rounded-3xl border p-4 ${theme === 'dark' ? 'border-white/10 bg-white/5' : 'border-slate-200 bg-white shadow-sm'} ${accent ? 'ring-1 ring-brand-primary/20' : ''}`}>
-      <div className={`text-sm ${theme === 'dark' ? 'text-white/65' : 'text-slate-600'}`}>{label}</div>
-      <div className="mt-2 text-2xl font-black text-brand-primary">{value}</div>
-    </div>
-  )
-}
-
-function ProgressBar({ label, value, max, theme, suffix = '' }) {
-  const percent = max > 0 ? clamp((value / max) * 100, 0, 100) : 0
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between text-sm">
-        <span className={theme === 'dark' ? 'text-white/75' : 'text-slate-700'}>{label}</span>
-        <span className={theme === 'dark' ? 'text-white/55' : 'text-slate-500'}>
-          {round(value)} / {round(max)}
-          {suffix}
-        </span>
+const Card = ({ title, subtitle, children, className = '' }) => (
+  <section className={`glass rounded-[28px] border-white/10 bg-white/10 p-5 shadow-glass ${className}`}>
+    {(title || subtitle) && (
+      <div className="mb-4">
+        {title ? <h3 className="card-title">{title}</h3> : null}
+        {subtitle ? <p className="mt-1 text-sm text-white/65 dark:text-white/65 text-slate-500">{subtitle}</p> : null}
       </div>
-      <div className={`h-3 overflow-hidden rounded-full ${theme === 'dark' ? 'bg-white/10' : 'bg-slate-100'}`}>
-        <motion.div
-          className="h-full rounded-full bg-gradient-to-r from-brand-primary to-orange-300"
-          initial={{ width: 0 }}
-          animate={{ width: `${percent}%` }}
-          transition={{ duration: 0.5, ease: 'easeOut' }}
-        />
-      </div>
-    </div>
-  )
-}
+    )}
+    {children}
+  </section>
+)
 
-export default function App() {
-  const initialSettings = loadJson(SETTINGS_KEY, loadJson(LEGACY_SETTINGS_KEY, { lang: 'ar', theme: 'dark', page: 'home' }))
+const Stat = ({ label, value, sub }) => (
+  <div className="rounded-[24px] border border-white/10 bg-black/10 p-4 backdrop-blur">
+    <div className="text-xs uppercase tracking-[0.2em] text-white/45 dark:text-white/45 text-slate-500">{label}</div>
+    <div className="mt-2 text-2xl font-semibold">{value}</div>
+    {sub ? <div className="mt-1 text-sm text-white/55 dark:text-white/55 text-slate-500">{sub}</div> : null}
+  </div>
+)
 
-  const [lang, setLang] = useState(initialSettings.lang === 'en' ? 'en' : 'ar')
-  const [theme, setTheme] = useState(initialSettings.theme === 'light' ? 'light' : 'dark')
-  const [page, setPage] = useState(PAGE_ORDER.includes(initialSettings.page) ? initialSettings.page : 'home')
-  const [state, setState] = useState(loadState)
-  const [editingMealId, setEditingMealId] = useState(null)
-  const [editingWeightId, setEditingWeightId] = useState(null)
-  const [mealForm, setMealForm] = useState({ name: '', calories: '', protein: '', carbs: '', fat: '' })
-  const [weightInput, setWeightInput] = useState('')
-  const [waterInput, setWaterInput] = useState('250')
+function App() {
+  const [lang, setLang] = useState(() => localStorage.getItem(STORAGE_LANG) || 'ar')
+  const [theme, setTheme] = useState(() => localStorage.getItem(STORAGE_THEME) || 'dark')
+  const [page, setPage] = useState(() => localStorage.getItem(STORAGE_PAGE) || 'home')
+  const [session, setSession] = useState(null)
+  const [initializing, setInitializing] = useState(true)
+  const [authMode, setAuthMode] = useState('login')
+  const [authForm, setAuthForm] = useState(DEFAULT_AUTH_FORM)
+  const [authMessage, setAuthMessage] = useState('')
+  const [authError, setAuthError] = useState('')
+  const [profile, setProfile] = useState(null)
+  const [profileForm, setProfileForm] = useState(DEFAULT_PROFILE_FORM)
+  const [meals, setMeals] = useState([])
+  const [weights, setWeights] = useState([])
+  const [dailyMetrics, setDailyMetrics] = useState(null)
+  const [mealForm, setMealForm] = useState(DEFAULT_MEAL_FORM)
+  const [weightForm, setWeightForm] = useState(DEFAULT_WEIGHT_FORM)
+  const [savingProfile, setSavingProfile] = useState(false)
+  const [savingMeal, setSavingMeal] = useState(false)
+  const [savingWeight, setSavingWeight] = useState(false)
+  const [savingWater, setSavingWater] = useState(false)
+
+  const t = strings[lang]
+  const isRtl = lang === 'ar'
+  const isReady = Boolean(supabase)
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
-  }, [state])
-
-  useEffect(() => {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ lang, theme, page }))
+    localStorage.setItem(STORAGE_LANG, lang)
+    localStorage.setItem(STORAGE_THEME, theme)
+    localStorage.setItem(STORAGE_PAGE, page)
   }, [lang, theme, page])
 
   useEffect(() => {
-    document.documentElement.lang = lang === 'ar' ? 'ar' : 'en'
-    document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr'
-    document.documentElement.dataset.theme = theme
     document.body.dataset.theme = theme
-    document.title = lang === 'ar' ? 'Glow Up Fitness | عربي / English' : 'Glow Up Fitness | Arabic / English'
-  }, [lang, theme])
+    document.documentElement.dataset.theme = theme
+    document.documentElement.lang = lang
+    document.documentElement.dir = isRtl ? 'rtl' : 'ltr'
+  }, [lang, theme, isRtl])
 
-  const t = translations[lang]
-  const goal = getGoal(state.profile.goal)
-  const activity = getActivity(state.profile.activity)
-  const bmr = useMemo(() => round(getBmr(state.profile)), [state.profile])
-  const tdee = useMemo(() => round(bmr * activity.factor), [bmr, activity.factor])
-  const targetCalories = useMemo(() => round(tdee + goal.adjust), [tdee, goal.adjust])
-  const waterGoal = useMemo(() => round(Math.max(2000, Number(state.profile.weight) * 35)), [state.profile.weight])
-
-  const consumed = useMemo(() => {
-    return state.meals.reduce(
-      (acc, meal) => ({
-        calories: acc.calories + safeNumber(meal.calories),
-        protein: acc.protein + safeNumber(meal.protein),
-        carbs: acc.carbs + safeNumber(meal.carbs),
-        fat: acc.fat + safeNumber(meal.fat),
-      }),
-      { calories: 0, protein: 0, carbs: 0, fat: 0 },
-    )
-  }, [state.meals])
-
-  const today = todayKey()
-
-  const waterToday = useMemo(
-    () => state.water.filter((entry) => entry.date === today).reduce((sum, entry) => sum + safeNumber(entry.amount), 0),
-    [state.water, today],
-  )
-
-  const weightLatest = useMemo(() => {
-    if (!state.weights.length) return Number(state.profile.weight)
-    const sorted = [...state.weights].sort((a, b) => new Date(a.date) - new Date(b.date))
-    return Number(sorted[sorted.length - 1].weight)
-  }, [state.profile.weight, state.weights])
-
-  const weeklyData = useMemo(() => {
-    const days = []
-    for (let i = 6; i >= 0; i -= 1) {
-      const date = new Date()
-      date.setDate(date.getDate() - i)
-      const key = todayKey(date)
-      const meals = state.meals.filter((item) => item.date === key)
-      const water = state.water.filter((item) => item.date === key)
-      const weightPoints = state.weights.filter((item) => item.date === key)
-      days.push({
-        date: key,
-        label: formatDate(key, lang),
-        weight: weightPoints.length ? Number(weightPoints[weightPoints.length - 1].weight) : null,
-        calories: meals.reduce((sum, item) => sum + safeNumber(item.calories), 0),
-        water: water.reduce((sum, item) => sum + safeNumber(item.amount), 0) / 1000,
-      })
-    }
-    return days
-  }, [lang, state.meals, state.water, state.weights])
-
-  const trend = useMemo(() => {
-    const valid = state.weights.filter((item) => Number.isFinite(Number(item.weight)))
-    if (valid.length < 2) return 0
-    const sorted = [...valid].sort((a, b) => new Date(a.date) - new Date(b.date))
-    return Number(sorted[sorted.length - 1].weight) - Number(sorted[0].weight)
-  }, [state.weights])
-
-  const feedback = useMemo(() => {
-    const calorieGap = targetCalories - consumed.calories
-    if (calorieGap < -150) return t.dashboard.noteB
-    if (calorieGap > 300) return t.dashboard.noteC
-    return t.dashboard.noteA
-  }, [consumed.calories, targetCalories, t.dashboard.noteA, t.dashboard.noteB, t.dashboard.noteC])
-
-  const navigate = (nextPage) => {
-    setPage(nextPage)
-    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' })
-  }
-
-  const toggleTheme = () => setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'))
-
-  const applyQuickMeal = (meal) => {
-    setState((prev) => ({
-      ...prev,
-      meals: [
-        {
-          id: makeId(),
-          name: lang === 'ar' ? meal.ar : meal.en,
-          calories: meal.calories,
-          protein: meal.protein,
-          carbs: meal.carbs,
-          fat: meal.fat,
-          date: today,
-        },
-        ...prev.meals,
-      ],
-    }))
-  }
-
-  const handleMealSubmit = (event) => {
-    event.preventDefault()
-    const nextMeal = {
-      id: editingMealId ?? makeId(),
-      name: mealForm.name.trim() || (lang === 'ar' ? 'وجبة مخصصة' : 'Custom meal'),
-      calories: round(mealForm.calories),
-      protein: round(mealForm.protein),
-      carbs: round(mealForm.carbs),
-      fat: round(mealForm.fat),
-      date: today,
+  useEffect(() => {
+    if (!supabase) {
+      setInitializing(false)
+      return
     }
 
-    setState((prev) => {
-      const filtered = prev.meals.filter((item) => item.id !== editingMealId)
-      return { ...prev, meals: [nextMeal, ...filtered] }
+    let alive = true
+
+    const bootstrap = async () => {
+      const { data } = await supabase.auth.getSession()
+      if (!alive) return
+      setSession(data.session ?? null)
+      setInitializing(false)
+    }
+
+    bootstrap()
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession)
+      if (!nextSession) {
+        setProfile(null)
+        setProfileForm(DEFAULT_PROFILE_FORM)
+        setMeals([])
+        setWeights([])
+        setDailyMetrics(null)
+      }
     })
 
-    setMealForm({ name: '', calories: '', protein: '', carbs: '', fat: '' })
-    setEditingMealId(null)
+    return () => {
+      alive = false
+      authListener.subscription.unsubscribe()
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!session?.user || !supabase) {
+      setProfile(null)
+      setMeals([])
+      setWeights([])
+      setDailyMetrics(null)
+      return
+    }
+
+    let alive = true
+
+    const loadAccount = async () => {
+      setInitializing(true)
+      const user = session.user
+
+      const { data: existingProfile, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .maybeSingle()
+
+      if (profileError) throw profileError
+
+      let activeProfile = existingProfile
+
+      if (!activeProfile) {
+        const starter = {
+          id: user.id,
+          email: user.email ?? '',
+          full_name: user.user_metadata?.full_name ?? user.user_metadata?.name ?? '',
+          ...DEFAULT_PROFILE_FORM,
+          ...calcTargets(DEFAULT_PROFILE_FORM),
+        }
+
+        const { data: createdProfile, error: createError } = await supabase
+          .from('profiles')
+          .upsert(starter)
+          .select('*')
+          .single()
+
+        if (createError) throw createError
+        activeProfile = createdProfile
+      }
+
+      const [mealsResult, weightsResult, dailyResult] = await Promise.all([
+        supabase
+          .from('meal_logs')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('log_date', { ascending: false })
+          .order('created_at', { ascending: false })
+          .limit(60),
+        supabase
+          .from('weight_logs')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('log_date', { ascending: false })
+          .order('created_at', { ascending: false })
+          .limit(60),
+        supabase
+          .from('daily_metrics')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('log_date', today())
+          .maybeSingle(),
+      ])
+
+      if (!alive) return
+
+      setProfile(activeProfile)
+      setProfileForm({
+        full_name: activeProfile.full_name || '',
+        gender: activeProfile.gender || 'male',
+        age: activeProfile.age ?? 27,
+        height_cm: activeProfile.height_cm ?? 178,
+        weight_kg: activeProfile.weight_kg ?? 78,
+        goal_weight_kg: activeProfile.goal_weight_kg ?? 74,
+        activity_level: activeProfile.activity_level || 'moderate',
+        goal_type: activeProfile.goal_type || 'maintain',
+      })
+      setMeals(mealsResult.data ?? [])
+      setWeights(weightsResult.data ?? [])
+      setDailyMetrics(dailyResult.data ?? { water_cups: 0, log_date: today() })
+      setWeightForm((prev) => ({
+        ...prev,
+        weight_kg: activeProfile.weight_kg ?? '',
+      }))
+      setInitializing(false)
+    }
+
+    loadAccount().catch((error) => {
+      console.error(error)
+      setInitializing(false)
+      setAuthError(error?.message || 'Failed to load account')
+    })
+
+    return () => {
+      alive = false
+    }
+  }, [session])
+
+  const metrics = useMemo(() => {
+    const activeProfile = profile ? cloneProfile(profile, session?.user?.email, session?.user?.user_metadata) : null
+    const selectedDate = today()
+    const todayMeals = meals.filter((meal) => meal.log_date === selectedDate)
+    const caloriesToday = todayMeals.reduce((sum, meal) => sum + toNumber(meal.calories), 0)
+    const proteinToday = todayMeals.reduce((sum, meal) => sum + toNumber(meal.protein), 0)
+    const carbsToday = todayMeals.reduce((sum, meal) => sum + toNumber(meal.carbs), 0)
+    const fatToday = todayMeals.reduce((sum, meal) => sum + toNumber(meal.fat), 0)
+    const waterToday = toNumber(dailyMetrics?.water_cups, 0)
+    const latestWeight = weights[0]?.weight_kg ?? activeProfile?.weight_kg ?? 0
+    const previousWeight = weights[1]?.weight_kg ?? activeProfile?.weight_kg ?? 0
+    const weightDelta = toNumber(latestWeight) - toNumber(previousWeight)
+    const caloriesTarget = activeProfile?.calories_target ?? 2200
+    const waterTarget = activeProfile?.water_target_cups ?? 8
+    const remainingCalories = caloriesTarget - caloriesToday
+    const weeklyWeights = [...weights]
+      .slice(0, 7)
+      .reverse()
+      .map((entry) => ({
+        date: formatDate(entry.log_date, lang),
+        weight: toNumber(entry.weight_kg),
+      }))
+    const latestChange = Number.isFinite(weightDelta) ? weightDelta : 0
+
+    return {
+      activeProfile,
+      caloriesToday,
+      proteinToday,
+      carbsToday,
+      fatToday,
+      waterToday,
+      waterTarget,
+      caloriesTarget,
+      remainingCalories,
+      latestWeight,
+      latestChange,
+      weeklyWeights,
+    }
+  }, [profile, session, meals, weights, dailyMetrics, lang])
+
+  const statusBadge = isReady ? t.connection_ok : t.setup_needed
+
+  const handleAuth = async (event) => {
+    event.preventDefault()
+    setAuthError('')
+    setAuthMessage('')
+
+    if (!supabase) {
+      setAuthError('Supabase environment variables are missing.')
+      return
+    }
+
+    const email = authForm.email.trim()
+    const password = authForm.password.trim()
+
+    try {
+      if (authMode === 'signup') {
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            emailRedirectTo: window.location.origin,
+            data: {
+              full_name: authForm.full_name.trim(),
+            },
+          },
+        })
+        if (error) throw error
+        setAuthMessage(t.signup_success)
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({ email, password })
+        if (error) throw error
+        setAuthMessage(t.auth_success)
+      }
+      setAuthForm(DEFAULT_AUTH_FORM)
+    } catch (error) {
+      setAuthError(error?.message || 'Authentication failed')
+    }
   }
 
-  const startEditMeal = (meal) => {
-    setEditingMealId(meal.id)
+  const handleGoogleLogin = async () => {
+    setAuthError('')
+    setAuthMessage('')
+
+    if (!supabase) {
+      setAuthError('Supabase environment variables are missing.')
+      return
+    }
+
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin,
+          queryParams: {
+            prompt: 'select_account',
+          },
+        },
+      })
+      if (error) throw error
+    } catch (error) {
+      setAuthError(error?.message || 'Google sign-in failed')
+    }
+  }
+
+  const handleLogout = async () => {
+    if (supabase) {
+      await supabase.auth.signOut()
+    }
+    setSession(null)
+    setProfile(null)
+    setMeals([])
+    setWeights([])
+    setDailyMetrics(null)
+    setAuthMessage('')
+    setAuthError('')
+  }
+
+  const saveProfile = async (event) => {
+    event.preventDefault()
+    if (!supabase || !session?.user) return
+    setSavingProfile(true)
+    setAuthError('')
+    setAuthMessage('')
+    try {
+      const payload = {
+        id: session.user.id,
+        email: session.user.email ?? '',
+        ...profileForm,
+        age: toNumber(profileForm.age, 27),
+        height_cm: toNumber(profileForm.height_cm, 178),
+        weight_kg: toNumber(profileForm.weight_kg, 78),
+        goal_weight_kg: toNumber(profileForm.goal_weight_kg, 74),
+        ...calcTargets(profileForm),
+      }
+      const { data, error } = await supabase.from('profiles').upsert(payload).select('*').single()
+      if (error) throw error
+      setProfile(data)
+      setProfileForm({
+        full_name: data.full_name ?? '',
+        gender: data.gender ?? 'male',
+        age: data.age ?? 27,
+        height_cm: data.height_cm ?? 178,
+        weight_kg: data.weight_kg ?? 78,
+        goal_weight_kg: data.goal_weight_kg ?? 74,
+        activity_level: data.activity_level ?? 'moderate',
+        goal_type: data.goal_type ?? 'maintain',
+      })
+      setAuthMessage(t.save_success)
+    } catch (error) {
+      setAuthError(error?.message || 'Could not save profile')
+    } finally {
+      setSavingProfile(false)
+    }
+  }
+
+  const addMeal = async (event) => {
+    event.preventDefault()
+    if (!supabase || !session?.user) return
+    setSavingMeal(true)
+    setAuthError('')
+    setAuthMessage('')
+    try {
+      const payload = {
+        user_id: session.user.id,
+        meal_name: mealForm.meal_name.trim(),
+        calories: toNumber(mealForm.calories),
+        protein: toNumber(mealForm.protein),
+        carbs: toNumber(mealForm.carbs),
+        fat: toNumber(mealForm.fat),
+        log_date: mealForm.log_date || today(),
+      }
+      if (!payload.meal_name) throw new Error('Meal name is required')
+      const { data, error } = await supabase.from('meal_logs').insert(payload).select('*').single()
+      if (error) throw error
+      setMeals((prev) => [data, ...prev])
+      setMealForm(DEFAULT_MEAL_FORM)
+      setAuthMessage(t.save_success)
+    } catch (error) {
+      setAuthError(error?.message || 'Could not add meal')
+    } finally {
+      setSavingMeal(false)
+    }
+  }
+
+  const addWeight = async (event) => {
+    event.preventDefault()
+    if (!supabase || !session?.user) return
+    setSavingWeight(true)
+    setAuthError('')
+    setAuthMessage('')
+    try {
+      const weightValue = toNumber(weightForm.weight_kg)
+      if (!weightValue) throw new Error('Weight is required')
+      const payload = {
+        user_id: session.user.id,
+        weight_kg: weightValue,
+        log_date: weightForm.log_date || today(),
+      }
+      const { data, error } = await supabase.from('weight_logs').insert(payload).select('*').single()
+      if (error) throw error
+      setWeights((prev) => [data, ...prev])
+      setWeightForm({ weight_kg: '', log_date: today() })
+      setAuthMessage(t.save_success)
+    } catch (error) {
+      setAuthError(error?.message || 'Could not add weight')
+    } finally {
+      setSavingWeight(false)
+    }
+  }
+
+  const updateWater = async (delta) => {
+    if (!supabase || !session?.user) return
+    setSavingWater(true)
+    setAuthError('')
+    setAuthMessage('')
+    try {
+      const nextValue = Math.max(0, toNumber(dailyMetrics?.water_cups, 0) + delta)
+      const payload = {
+        user_id: session.user.id,
+        log_date: today(),
+        water_cups: nextValue,
+      }
+      const { data, error } = await supabase
+        .from('daily_metrics')
+        .upsert(payload, { onConflict: 'user_id,log_date' })
+        .select('*')
+        .single()
+      if (error) throw error
+      setDailyMetrics(data)
+      setAuthMessage(t.save_success)
+    } catch (error) {
+      setAuthError(error?.message || 'Could not update water')
+    } finally {
+      setSavingWater(false)
+    }
+  }
+
+  const deleteMeal = async (id) => {
+    if (!supabase || !session?.user) return
+    const { error } = await supabase.from('meal_logs').delete().eq('id', id)
+    if (!error) {
+      setMeals((prev) => prev.filter((meal) => meal.id !== id))
+    }
+  }
+
+  const deleteWeight = async (id) => {
+    if (!supabase || !session?.user) return
+    const { error } = await supabase.from('weight_logs').delete().eq('id', id)
+    if (!error) {
+      setWeights((prev) => prev.filter((entry) => entry.id !== id))
+    }
+  }
+
+  const fillQuickMeal = (meal) => {
     setMealForm({
-      name: meal.name,
+      meal_name: meal.name[lang],
       calories: meal.calories,
       protein: meal.protein,
       carbs: meal.carbs,
       fat: meal.fat,
+      log_date: today(),
     })
   }
-
-  const deleteMeal = (id) => {
-    setState((prev) => ({ ...prev, meals: prev.meals.filter((item) => item.id !== id) }))
-    if (editingMealId === id) {
-      setEditingMealId(null)
-      setMealForm({ name: '', calories: '', protein: '', carbs: '', fat: '' })
-    }
-  }
-
-  const addWeight = () => {
-    const weight = safeNumber(weightInput)
-    if (!weight) return
-    setState((prev) => ({
-      ...prev,
-      profile: { ...prev.profile, weight },
-      weights: [{ id: makeId(), date: today, weight }, ...prev.weights],
-    }))
-    setWeightInput('')
-  }
-
-  const startEditWeight = (item) => {
-    setEditingWeightId(item.id)
-    setWeightInput(String(item.weight))
-  }
-
-  const saveEditedWeight = () => {
-    const weight = safeNumber(weightInput)
-    if (!weight || !editingWeightId) return
-    setState((prev) => ({
-      ...prev,
-      profile: { ...prev.profile, weight },
-      weights: prev.weights.map((item) => (item.id === editingWeightId ? { ...item, weight } : item)),
-    }))
-    setWeightInput('')
-    setEditingWeightId(null)
-  }
-
-  const deleteWeight = (id) => {
-    setState((prev) => ({ ...prev, weights: prev.weights.filter((item) => item.id !== id) }))
-    if (editingWeightId === id) {
-      setEditingWeightId(null)
-      setWeightInput('')
-    }
-  }
-
-  const addWater = () => {
-    const amount = safeNumber(waterInput, 250)
-    if (!amount) return
-    setState((prev) => ({
-      ...prev,
-      water: [{ id: makeId(), date: today, amount }, ...prev.water],
-    }))
-  }
-
-  const removeWater = (id) => {
-    setState((prev) => ({ ...prev, water: prev.water.filter((item) => item.id !== id) }))
-  }
-
-  const saveProfile = () => {
-    setState((prev) => ({
-      ...prev,
-      profile: {
-        ...prev.profile,
-        name: prev.profile.name.trim() || (lang === 'ar' ? 'مستخدم Glow Up' : 'Glow Up user'),
-        age: clamp(round(prev.profile.age), 14, 99),
-        height: clamp(round(prev.profile.height), 120, 230),
-        weight: clamp(round(prev.profile.weight), 30, 250),
-        goalWeight: clamp(round(prev.profile.goalWeight), 30, 250),
-      },
-    }))
-  }
-
-  const resetAll = () => {
-    const seedDate = todayKey()
-    setState({
-      profile: DEFAULT_PROFILE,
-      macros: DEFAULT_MACROS,
-      meals: [],
-      weights: [{ id: makeId(), date: seedDate, weight: DEFAULT_PROFILE.weight }],
-      water: [{ id: makeId(), date: seedDate, amount: 300 }],
-    })
-    setEditingMealId(null)
-    setEditingWeightId(null)
-    setMealForm({ name: '', calories: '', protein: '', carbs: '', fat: '' })
-    setWeightInput('')
-  }
-
-  const pageShell = theme === 'dark'
-    ? 'bg-[#0b0f14] text-white'
-    : 'bg-[#f5f7fb] text-slate-900'
-
-  const cardShell = theme === 'dark'
-    ? 'border-white/10 bg-white/5 text-white shadow-glass'
-    : 'border-slate-200 bg-white text-slate-900 shadow-sm'
-
-  const lineCard = theme === 'dark'
-    ? 'border-white/10 bg-white/5'
-    : 'border-slate-200 bg-white'
-
-  const mutedText = theme === 'dark' ? 'text-white/65' : 'text-slate-600'
-  const strongText = theme === 'dark' ? 'text-white' : 'text-slate-900'
-  const inputShell = theme === 'dark'
-    ? 'border-white/10 bg-black/30 text-white placeholder:text-white/35'
-    : 'border-slate-200 bg-white text-slate-900 placeholder:text-slate-400'
-
-  const navItems = [
-    ['home', t.nav.home],
-    ['dashboard', t.nav.dashboard],
-    ['progress', t.nav.progress],
-    ['settings', t.nav.settings],
-  ]
-
-  const mealsToday = state.meals.filter((meal) => meal.date === today)
 
   return (
-    <div className={`${pageShell} min-h-screen transition-colors duration-300`}>
-      <div className="mx-auto max-w-6xl px-3 py-3 sm:px-5 sm:py-5 lg:px-6 lg:py-6">
-        <header className={`sticky top-3 z-50 rounded-[1.5rem] border px-4 py-3 backdrop-blur-xl ${cardShell}`}>
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-brand-primary/15 text-sm font-black text-brand-primary">G</div>
-                <div>
-                  <div className="text-lg font-black tracking-tight text-brand-primary">{t.nav.brand}</div>
-                  <div className={`text-[11px] uppercase tracking-[0.22em] ${mutedText}`}>
-                    {lang === 'ar' ? 'fitness tracker' : 'fitness tracker'}
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 lg:hidden">
-                <ThemePill active={lang === 'ar'} onClick={() => setLang('ar')} theme={theme}>AR</ThemePill>
-                <ThemePill active={lang === 'en'} onClick={() => setLang('en')} theme={theme}>EN</ThemePill>
-              </div>
+    <div dir={isRtl ? 'rtl' : 'ltr'} className="min-h-screen">
+      <header className="sticky top-0 z-30 border-b border-white/10 bg-black/10 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
+          <button
+            onClick={() => setPage('home')}
+            className="flex items-center gap-3 text-left"
+          >
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-400 to-amber-200 text-sm font-black text-slate-950 shadow-lg shadow-orange-500/30">
+              G
             </div>
+            <div>
+              <div className="text-sm font-semibold tracking-[0.18em] uppercase text-white/55 dark:text-white/55 text-slate-500">{t.brand}</div>
+              <div className="text-sm text-white/70 dark:text-white/70 text-slate-600">{statusBadge}</div>
+            </div>
+          </button>
 
-            <nav className="flex items-center gap-2 overflow-x-auto pb-1 text-sm">
-              {navItems.map(([key, label]) => (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => navigate(key)}
-                  className={`whitespace-nowrap rounded-full px-3 py-2 transition ${
-                    page === key
-                      ? 'bg-brand-primary text-black'
-                      : theme === 'dark'
-                        ? 'text-white/75 hover:bg-white/5 hover:text-white'
-                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </nav>
-
-            <div className="flex items-center gap-2">
+          <div className="hidden items-center gap-2 md:flex">
+            {PAGES.map((item) => (
               <button
-                type="button"
-                onClick={toggleTheme}
-                className={`rounded-full px-3 py-2 text-xs font-bold transition sm:text-sm ${
-                  theme === 'dark' ? 'bg-white/5 text-white hover:bg-white/10' : 'bg-slate-100 text-slate-800 hover:bg-slate-200'
+                key={item}
+                onClick={() => setPage(item)}
+                className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+                  page === item
+                    ? 'bg-white text-slate-950 shadow-lg shadow-orange-500/10'
+                    : 'text-white/75 hover:bg-white/10 dark:text-slate-700 dark:hover:bg-slate-200/70'
                 }`}
               >
-                {theme === 'dark' ? '🌙 Dark' : '☀️ Light'}
+                {t[item]}
               </button>
-              <div className="hidden items-center gap-2 lg:flex">
-                <ThemePill active={lang === 'ar'} onClick={() => setLang('ar')} theme={theme}>AR</ThemePill>
-                <ThemePill active={lang === 'en'} onClick={() => setLang('en')} theme={theme}>EN</ThemePill>
-              </div>
-              <button
-                type="button"
-                onClick={() => navigate('dashboard')}
-                className="rounded-full bg-brand-primary px-4 py-2 text-xs font-bold text-black transition hover:opacity-90 sm:text-sm"
-              >
-                {t.nav.cta}
-              </button>
-            </div>
+            ))}
           </div>
-        </header>
 
-        <main className="mt-4 space-y-4 lg:mt-6 lg:space-y-6">
-          {page === 'home' && (
-            <>
-              <section className={`grid gap-5 rounded-[1.75rem] border p-5 sm:p-6 lg:grid-cols-[1.15fr_0.85fr] ${cardShell}`}>
-                <div className="space-y-5">
-                  <div className="inline-flex items-center rounded-full border border-brand-primary/25 bg-brand-primary/10 px-4 py-2 text-xs font-bold text-brand-primary">
-                    {t.hero.badge}
-                  </div>
-                  <div>
-                    <h1 className={`max-w-3xl text-3xl font-black leading-tight sm:text-4xl ${strongText}`}>
-                      {t.hero.title}
-                    </h1>
-                    <p className={`mt-4 max-w-2xl text-sm leading-7 sm:text-base ${mutedText}`}>
-                      {t.hero.description}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setLang((prev) => (prev === 'ar' ? 'en' : 'ar'))}
+              className="rounded-full border border-white/10 bg-white/10 px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em]"
+            >
+              {lang}
+            </button>
+            <button
+              onClick={() => setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'))}
+              className="rounded-full border border-white/10 bg-white/10 px-3 py-2 text-xs font-semibold"
+            >
+              {theme === 'dark' ? t.light : t.dark}
+            </button>
+            {session ? (
+              <button
+                onClick={handleLogout}
+                className="rounded-full bg-orange-400 px-4 py-2 text-sm font-semibold text-slate-950 shadow-lg shadow-orange-500/20 transition hover:bg-orange-300"
+              >
+                {t.logout}
+              </button>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="mx-auto flex max-w-7xl gap-2 overflow-x-auto px-4 pb-3 sm:px-6 lg:px-8 md:hidden">
+          {PAGES.map((item) => (
+            <button
+              key={item}
+              onClick={() => setPage(item)}
+              className={`whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium transition ${
+                page === item
+                  ? 'bg-white text-slate-950'
+                  : 'border border-white/10 bg-white/5 text-white/70'
+              }`}
+            >
+              {t[item]}
+            </button>
+          ))}
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+        {!session ? (
+          <div className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+            <motion.section
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="glass rounded-[32px] border-white/10 bg-gradient-to-br from-white/12 to-white/5 p-6 shadow-glass"
+            >
+              <div className="max-w-2xl">
+                <span className="inline-flex rounded-full border border-orange-200/30 bg-orange-400/15 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-orange-200">
+                  {t.hero_badge}
+                </span>
+                <h1 className="mt-5 text-4xl font-black leading-tight sm:text-5xl">
+                  {t.hero_title}
+                </h1>
+                <p className="mt-4 max-w-2xl text-base leading-7 text-white/70 dark:text-white/70 text-slate-600">
+                  {t.hero_desc}
+                </p>
+
+                <div className="mt-8 flex flex-wrap gap-3">
+                  <button
+                    onClick={() => setPage('dashboard')}
+                    className="rounded-2xl bg-orange-400 px-5 py-3 font-semibold text-slate-950 shadow-lg shadow-orange-500/30 transition hover:bg-orange-300"
+                  >
+                    {t.open_dashboard}
+                  </button>
+                  <button
+                    onClick={() => setPage('settings')}
+                    className="rounded-2xl border border-white/10 bg-white/10 px-5 py-3 font-semibold text-white/90 transition hover:bg-white/10"
+                  >
+                    {t.start_tracking}
+                  </button>
+                </div>
+
+                <div className="mt-8 grid gap-3 sm:grid-cols-3">
+                  <Stat label={t.profile_card} value="Supabase" sub="Auth + database" />
+                  <Stat label={t.calories_target} value="RLS" sub="Private rows per user" />
+                  <Stat label={t.water_target} value="Google" sub="OAuth ready" />
+                </div>
+
+                <div className="mt-8 grid gap-4 sm:grid-cols-3">
+                  <div className="rounded-[24px] border border-white/10 bg-white/5 p-5">
+                    <div className="text-sm font-semibold">{lang === 'ar' ? 'واجهة نظيفة' : 'Clean UI'}</div>
+                    <p className="mt-2 text-sm text-white/65 dark:text-white/65 text-slate-600">
+                      {lang === 'ar' ? 'Glassmorphism خفيف وألوان برتقالي/كريمي.' : 'Soft glassmorphism with orange and cream tones.'}
                     </p>
                   </div>
-                  <div className="flex flex-wrap gap-3">
-                    <button
-                      type="button"
-                      onClick={() => navigate('dashboard')}
-                      className="rounded-full bg-brand-primary px-5 py-3 text-sm font-bold text-black transition hover:opacity-90"
-                    >
-                      {t.hero.primary}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => navigate('dashboard')}
-                      className={`rounded-full border px-5 py-3 text-sm font-bold transition ${
-                        theme === 'dark'
-                          ? 'border-white/10 bg-white/5 text-white hover:border-brand-primary/30'
-                          : 'border-slate-200 bg-white text-slate-800 hover:border-brand-primary/30'
-                      }`}
-                    >
-                      {t.hero.secondary}
-                    </button>
+                  <div className="rounded-[24px] border border-white/10 bg-white/5 p-5">
+                    <div className="text-sm font-semibold">{lang === 'ar' ? 'بيانات حقيقية' : 'Real data'}</div>
+                    <p className="mt-2 text-sm text-white/65 dark:text-white/65 text-slate-600">
+                      {lang === 'ar' ? 'كل مستخدم له rows منفصلة في Supabase.' : 'Each user gets isolated rows in Supabase.'}
+                    </p>
                   </div>
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    {t.hero.stats.map(([value, label]) => (
-                      <MetricCard key={label} label={label} value={value} theme={theme} accent />
-                    ))}
-                  </div>
-                </div>
-
-                <div className={`rounded-[1.5rem] border p-5 ${theme === 'dark' ? 'border-white/10 bg-black/20' : 'border-slate-200 bg-slate-50'}`}>
-                  <div className={`text-xs font-bold uppercase tracking-[0.28em] text-brand-primary`}>
-                    {lang === 'ar' ? 'الفكرة الأساسية' : 'Core idea'}
-                  </div>
-                  <div className={`mt-3 text-xl font-black ${strongText}`}>
-                    {lang === 'ar' ? 'صفحة أولى سريعة، ثم أداة حقيقية.' : 'Fast landing page, then a real tool.'}
-                  </div>
-                  <div className={`mt-4 text-sm leading-7 ${mutedText}`}>
-                    {lang === 'ar'
-                      ? 'الزائر يفهم الفكرة من أول نظرة، ثم ينتقل مباشرةً إلى اللوحة بدون عناصر زائدة.'
-                      : 'The visitor understands the product at a glance, then moves straight into the dashboard without extra clutter.'}
-                  </div>
-                  <div className="mt-5 grid gap-3">
-                    <div className={`rounded-2xl border p-4 ${theme === 'dark' ? 'border-white/10 bg-white/5' : 'border-slate-200 bg-white'}`}>
-                      <div className={`text-sm ${mutedText}`}>{lang === 'ar' ? 'أقسام أقل' : 'Fewer sections'}</div>
-                      <div className="mt-1 text-lg font-bold">Home • Dashboard • Progress • Settings</div>
-                    </div>
-                    <div className={`rounded-2xl border p-4 ${theme === 'dark' ? 'border-white/10 bg-white/5' : 'border-slate-200 bg-white'}`}>
-                      <div className={`text-sm ${mutedText}`}>{lang === 'ar' ? 'التركيز' : 'Focus'}</div>
-                      <div className="mt-1 text-lg font-bold">{lang === 'ar' ? 'الفعل قبل الزينة' : 'Action before decoration'}</div>
-                    </div>
-                  </div>
-                </div>
-              </section>
-
-              <section className={`rounded-[1.75rem] border p-5 sm:p-6 ${cardShell}`}>
-                <SectionHeading
-                  eyebrow={lang === 'ar' ? 'طريقة الاستخدام' : 'How it works'}
-                  title={t.home.title}
-                  description={t.home.description}
-                  theme={theme}
-                />
-                <div className="mt-6 grid gap-4 md:grid-cols-3">
-                  {t.home.cards.map(([title, desc], index) => (
-                    <div key={title} className={`rounded-[1.5rem] border p-5 ${lineCard}`}>
-                      <div className="text-xs font-black uppercase tracking-[0.25em] text-brand-primary">
-                        0{index + 1}
-                      </div>
-                      <div className="mt-3 text-lg font-bold">{title}</div>
-                      <div className={`mt-3 text-sm leading-7 ${mutedText}`}>{desc}</div>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            </>
-          )}
-
-          {page === 'dashboard' && (
-            <section className={`rounded-[1.75rem] border p-5 sm:p-6 ${cardShell}`}>
-              <SectionHeading
-                eyebrow={t.nav.dashboard}
-                title={t.dashboard.title}
-                description={t.dashboard.description}
-                theme={theme}
-              />
-
-              <div className="mt-6 grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
-                <div className="space-y-5">
-                  <div className={`rounded-[1.5rem] border p-5 ${lineCard}`}>
-                    <div className="grid gap-3 sm:grid-cols-3">
-                      <MetricCard label={t.dashboard.caloriesToday} value={consumed.calories} theme={theme} accent />
-                      <MetricCard label={t.dashboard.remaining} value={targetCalories - consumed.calories} theme={theme} />
-                      <MetricCard label={t.dashboard.waterToday} value={Math.round(waterToday / 250)} theme={theme} />
-                    </div>
-                    <div className="mt-5 space-y-4">
-                      <div className={`text-xs font-bold uppercase tracking-[0.25em] ${mutedText}`}>{t.dashboard.macros}</div>
-                      <ProgressBar label={t.dashboard.protein} value={consumed.protein} max={state.macros.protein} theme={theme} suffix="g" />
-                      <ProgressBar label={t.dashboard.carbs} value={consumed.carbs} max={state.macros.carbs} theme={theme} suffix="g" />
-                      <ProgressBar label={t.dashboard.fat} value={consumed.fat} max={state.macros.fat} theme={theme} suffix="g" />
-                    </div>
-                  </div>
-
-                  <div className={`rounded-[1.5rem] border p-5 ${lineCard}`}>
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <div className={`text-xs font-bold uppercase tracking-[0.25em] ${mutedText}`}>{t.dashboard.quickAdd}</div>
-                        <div className={`mt-1 text-xl font-black ${strongText}`}>{t.dashboard.customMeal}</div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={resetAll}
-                        className={`rounded-full px-4 py-2 text-sm font-bold transition ${
-                          theme === 'dark' ? 'bg-white/5 text-white hover:bg-white/10' : 'bg-slate-100 text-slate-800 hover:bg-slate-200'
-                        }`}
-                      >
-                        {t.dashboard.reset}
-                      </button>
-                    </div>
-                    <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                      {QUICK_MEALS.map((meal) => (
-                        <button
-                          key={meal.id}
-                          type="button"
-                          onClick={() => applyQuickMeal(meal)}
-                          className={`rounded-[1.25rem] border p-4 text-left transition hover:-translate-y-0.5 ${
-                            theme === 'dark'
-                              ? 'border-white/10 bg-white/5 hover:border-brand-primary/30'
-                              : 'border-slate-200 bg-white hover:border-brand-primary/30'
-                          }`}
-                        >
-                          <div className="font-bold">{lang === 'ar' ? meal.ar : meal.en}</div>
-                          <div className={`mt-2 text-sm ${mutedText}`}>{meal.calories} kcal • {meal.protein}P</div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className={`rounded-[1.5rem] border p-5 ${lineCard}`}>
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <div className={`text-xs font-bold uppercase tracking-[0.25em] ${mutedText}`}>{t.dashboard.customMeal}</div>
-                        <div className={`mt-1 text-xl font-black ${strongText}`}>
-                          {editingMealId ? t.dashboard.updateMeal : t.dashboard.addMeal}
-                        </div>
-                      </div>
-                      {editingMealId && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEditingMealId(null)
-                            setMealForm({ name: '', calories: '', protein: '', carbs: '', fat: '' })
-                          }}
-                          className={`rounded-full px-4 py-2 text-sm font-bold transition ${
-                            theme === 'dark' ? 'bg-white/5 text-white' : 'bg-slate-100 text-slate-800'
-                          }`}
-                        >
-                          {t.dashboard.cancel}
-                        </button>
-                      )}
-                    </div>
-
-                    <form onSubmit={handleMealSubmit} className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-                      <input
-                        className={`input ${inputShell} xl:col-span-2`}
-                        placeholder={t.dashboard.mealName}
-                        value={mealForm.name}
-                        onChange={(e) => setMealForm((prev) => ({ ...prev, name: e.target.value }))}
-                      />
-                      <input
-                        type="number"
-                        className={`input ${inputShell}`}
-                        placeholder="kcal"
-                        value={mealForm.calories}
-                        onChange={(e) => setMealForm((prev) => ({ ...prev, calories: e.target.value }))}
-                      />
-                      <input
-                        type="number"
-                        className={`input ${inputShell}`}
-                        placeholder={t.dashboard.protein}
-                        value={mealForm.protein}
-                        onChange={(e) => setMealForm((prev) => ({ ...prev, protein: e.target.value }))}
-                      />
-                      <input
-                        type="number"
-                        className={`input ${inputShell}`}
-                        placeholder={t.dashboard.carbs}
-                        value={mealForm.carbs}
-                        onChange={(e) => setMealForm((prev) => ({ ...prev, carbs: e.target.value }))}
-                      />
-                      <input
-                        type="number"
-                        className={`input ${inputShell}`}
-                        placeholder={t.dashboard.fat}
-                        value={mealForm.fat}
-                        onChange={(e) => setMealForm((prev) => ({ ...prev, fat: e.target.value }))}
-                      />
-                      <button type="submit" className="rounded-2xl bg-brand-primary px-5 py-3 text-sm font-bold text-black transition hover:opacity-90 xl:col-span-5">
-                        {editingMealId ? t.dashboard.updateMeal : t.dashboard.addMeal}
-                      </button>
-                    </form>
-                  </div>
-
-                  <div className={`rounded-[1.5rem] border p-5 ${lineCard}`}>
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <div className={`text-xs font-bold uppercase tracking-[0.25em] ${mutedText}`}>{t.dashboard.water}</div>
-                        <div className={`mt-1 text-xl font-black ${strongText}`}>{Math.round(waterToday / 250)} {lang === 'ar' ? 'كوب' : 'cups'}</div>
-                      </div>
-                      <div className={`rounded-2xl border px-3 py-2 text-xs font-bold ${theme === 'dark' ? 'border-white/10 bg-white/5 text-white/70' : 'border-slate-200 bg-white text-slate-600'}`}>
-                        {waterGoal} ml
-                      </div>
-                    </div>
-                    <div className="mt-4 flex flex-wrap gap-3">
-                      <input type="number" className={`input ${inputShell} max-w-[180px]`} value={waterInput} onChange={(e) => setWaterInput(e.target.value)} />
-                      <button type="button" onClick={addWater} className="rounded-2xl bg-brand-primary px-5 py-3 text-sm font-bold text-black transition hover:opacity-90">
-                        {t.dashboard.addWater}
-                      </button>
-                    </div>
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      {state.water
-                        .filter((entry) => entry.date === today)
-                        .slice(0, 6)
-                        .map((entry) => (
-                          <div
-                            key={entry.id}
-                            className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-xs ${theme === 'dark' ? 'border-white/10 bg-white/5 text-white/75' : 'border-slate-200 bg-white text-slate-700'}`}
-                          >
-                            <span>{entry.amount} ml</span>
-                            <button type="button" onClick={() => removeWater(entry.id)} className="font-bold text-brand-primary">
-                              ×
-                            </button>
-                          </div>
-                        ))}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-5">
-                  <div className={`rounded-[1.5rem] border p-5 ${lineCard}`}>
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <div className={`text-xs font-bold uppercase tracking-[0.25em] ${mutedText}`}>{t.dashboard.smartNote}</div>
-                        <div className={`mt-1 text-xl font-black ${strongText}`}>{feedback}</div>
-                      </div>
-                      <div className="rounded-2xl border border-brand-primary/20 bg-brand-primary/10 px-3 py-2 text-xs font-bold text-brand-primary">
-                        {bmr} / {tdee}
-                      </div>
-                    </div>
-                    <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-                      <MetricCard label={t.dashboard.remaining} value={targetCalories - consumed.calories} theme={theme} />
-                      <MetricCard label={lang === 'ar' ? 'الوزن المستهدف' : 'Goal weight'} value={`${state.profile.goalWeight} kg`} theme={theme} />
-                    </div>
-                  </div>
-
-                  <div className={`rounded-[1.5rem] border p-5 ${lineCard}`}>
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <div className={`text-xs font-bold uppercase tracking-[0.25em] ${mutedText}`}>{t.dashboard.weightLog}</div>
-                        <div className={`mt-1 text-xl font-black ${strongText}`}>{weightLatest} kg</div>
-                      </div>
-                      <div className={`rounded-2xl border px-3 py-2 text-xs font-bold ${theme === 'dark' ? 'border-white/10 bg-white/5 text-white/70' : 'border-slate-200 bg-white text-slate-600'}`}>
-                        {state.weights.length}
-                      </div>
-                    </div>
-                    <div className="mt-4 flex flex-wrap gap-3">
-                      <input
-                        type="number"
-                        className={`input ${inputShell} max-w-[180px]`}
-                        placeholder={t.dashboard.addWeight}
-                        value={weightInput}
-                        onChange={(e) => setWeightInput(e.target.value)}
-                      />
-                      <button
-                        type="button"
-                        onClick={editingWeightId ? saveEditedWeight : addWeight}
-                        className="rounded-2xl bg-brand-primary px-5 py-3 text-sm font-bold text-black transition hover:opacity-90"
-                      >
-                        {editingWeightId ? t.dashboard.updateWeight : t.dashboard.addWeight}
-                      </button>
-                      {editingWeightId && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEditingWeightId(null)
-                            setWeightInput('')
-                          }}
-                          className={`rounded-2xl border px-5 py-3 text-sm font-bold transition ${
-                            theme === 'dark' ? 'border-white/10 bg-white/5 text-white' : 'border-slate-200 bg-white text-slate-800'
-                          }`}
-                        >
-                          {t.dashboard.cancel}
-                        </button>
-                      )}
-                    </div>
-                    <div className="mt-4 space-y-2">
-                      {state.weights.slice(0, 5).map((item) => (
-                        <div
-                          key={item.id}
-                          className={`flex items-center justify-between rounded-2xl border px-4 py-3 text-sm ${theme === 'dark' ? 'border-white/10 bg-white/5' : 'border-slate-200 bg-white'}`}
-                        >
-                          <div>
-                            <div className="font-bold">{item.weight} kg</div>
-                            <div className={mutedText}>{formatDate(item.date, lang)}</div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <button type="button" onClick={() => startEditWeight(item)} className="rounded-full border border-brand-primary/20 px-3 py-1 text-xs font-bold text-brand-primary">
-                              {t.dashboard.edit}
-                            </button>
-                            <button type="button" onClick={() => deleteWeight(item.id)} className="rounded-full border border-white/10 px-3 py-1 text-xs font-bold text-white/70">
-                              {t.dashboard.remove}
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className={`rounded-[1.5rem] border p-5 ${lineCard}`}>
-                    <div className={`text-xs font-bold uppercase tracking-[0.25em] ${mutedText}`}>{t.dashboard.mealHistory}</div>
-                    <div className="mt-4 space-y-3">
-                      {mealsToday.length ? mealsToday.map((meal) => (
-                        <div
-                          key={meal.id}
-                          className={`rounded-2xl border p-4 ${theme === 'dark' ? 'border-white/10 bg-white/5' : 'border-slate-200 bg-white'}`}
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <div className="text-base font-bold">{meal.name}</div>
-                              <div className={`mt-1 text-xs ${mutedText}`}>{formatDate(meal.date, lang)}</div>
-                            </div>
-                            <div className="text-right text-sm font-bold text-brand-primary">{meal.calories} kcal</div>
-                          </div>
-                          <div className={`mt-3 grid grid-cols-4 gap-2 text-xs ${mutedText}`}>
-                            <span>P {meal.protein}</span>
-                            <span>C {meal.carbs}</span>
-                            <span>F {meal.fat}</span>
-                            <span>{meal.date}</span>
-                          </div>
-                          <div className="mt-3 flex gap-2">
-                            <button type="button" onClick={() => startEditMeal(meal)} className="rounded-full border border-brand-primary/20 px-3 py-1 text-xs font-bold text-brand-primary">
-                              {t.dashboard.edit}
-                            </button>
-                            <button type="button" onClick={() => deleteMeal(meal.id)} className="rounded-full border border-white/10 px-3 py-1 text-xs font-bold text-white/70">
-                              {t.dashboard.remove}
-                            </button>
-                          </div>
-                        </div>
-                      )) : (
-                        <div className={`rounded-2xl border border-dashed p-6 text-sm ${mutedText}`}>{t.dashboard.emptyMeals}</div>
-                      )}
-                    </div>
+                  <div className="rounded-[24px] border border-white/10 bg-white/5 p-5">
+                    <div className="text-sm font-semibold">{lang === 'ar' ? 'جاهز للنشر' : 'Vercel ready'}</div>
+                    <p className="mt-2 text-sm text-white/65 dark:text-white/65 text-slate-600">
+                      {lang === 'ar' ? 'الواجهة فقط على Vercel والبيانات على Supabase.' : 'Frontend on Vercel, data stays on Supabase.'}
+                    </p>
                   </div>
                 </div>
               </div>
-            </section>
-          )}
+            </motion.section>
 
-          {page === 'progress' && (
-            <section className={`rounded-[1.75rem] border p-5 sm:p-6 ${cardShell}`}>
-              <SectionHeading
-                eyebrow={t.nav.progress}
-                title={t.progress.title}
-                description={t.progress.description}
-                theme={theme}
-              />
+            <motion.section
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+            >
+              <Card
+                title={authMode === 'login' ? t.sign_in : t.sign_up}
+                subtitle={t.auth_hint}
+              >
+                <div className="mb-4 flex gap-2">
+                  <button
+                    onClick={() => setAuthMode('login')}
+                    className={`flex-1 rounded-2xl px-4 py-3 text-sm font-semibold transition ${
+                      authMode === 'login' ? 'bg-orange-400 text-slate-950' : 'bg-white/10 text-white/75 border border-white/10'
+                    }`}
+                  >
+                    {t.sign_in}
+                  </button>
+                  <button
+                    onClick={() => setAuthMode('signup')}
+                    className={`flex-1 rounded-2xl px-4 py-3 text-sm font-semibold transition ${
+                      authMode === 'signup' ? 'bg-orange-400 text-slate-950' : 'bg-white/10 text-white/75 border border-white/10'
+                    }`}
+                  >
+                    {t.sign_up}
+                  </button>
+                </div>
 
-              <div className="mt-6 grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
-                <div className={`rounded-[1.5rem] border p-4 ${lineCard}`}>
-                  {weeklyData.every((item) => item.weight === null && item.calories === 0 && item.water === 0) ? (
-                    <div className={`flex min-h-[360px] items-center justify-center rounded-[1.25rem] border border-dashed p-6 text-center ${theme === 'dark' ? 'border-white/10 bg-black/20' : 'border-slate-200 bg-slate-50'} ${mutedText}`}>
-                      {t.progress.empty}
+                <form onSubmit={handleAuth} className="space-y-4">
+                  {authMode === 'signup' ? (
+                    <Field label={t.full_name}>
+                      <input
+                        className="input bg-white/5 border-white/10 text-white placeholder:text-white/35"
+                        value={authForm.full_name}
+                        onChange={(e) => setAuthForm((prev) => ({ ...prev, full_name: e.target.value }))}
+                        placeholder={t.full_name}
+                        autoComplete="name"
+                      />
+                    </Field>
+                  ) : null}
+                  <Field label={t.email}>
+                    <input
+                      type="email"
+                      required
+                      className="input bg-white/5 border-white/10 text-white placeholder:text-white/35"
+                      value={authForm.email}
+                      onChange={(e) => setAuthForm((prev) => ({ ...prev, email: e.target.value }))}
+                      placeholder="name@example.com"
+                      autoComplete="email"
+                    />
+                  </Field>
+                  <Field label={t.password}>
+                    <input
+                      type="password"
+                      required
+                      className="input bg-white/5 border-white/10 text-white placeholder:text-white/35"
+                      value={authForm.password}
+                      onChange={(e) => setAuthForm((prev) => ({ ...prev, password: e.target.value }))}
+                      placeholder="••••••••"
+                      autoComplete={authMode === 'signup' ? 'new-password' : 'current-password'}
+                    />
+                  </Field>
+
+                  <button
+                    type="submit"
+                    className="w-full rounded-2xl bg-orange-400 px-4 py-3 font-semibold text-slate-950 shadow-lg shadow-orange-500/30 transition hover:bg-orange-300"
+                  >
+                    {authMode === 'login' ? t.sign_in : t.sign_up}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleGoogleLogin}
+                    className="w-full rounded-2xl border border-white/10 bg-white/10 px-4 py-3 font-semibold text-white transition hover:bg-white/10"
+                  >
+                    {t.google}
+                  </button>
+                </form>
+
+                <div className="mt-4 space-y-2 text-sm">
+                  <p className="text-white/60 dark:text-white/60 text-slate-500">{t.auth_hint}</p>
+                  <p className={`rounded-2xl border px-4 py-3 ${isReady ? 'border-emerald-300/20 bg-emerald-400/10 text-emerald-100' : 'border-amber-300/20 bg-amber-400/10 text-amber-100'}`}>
+                    {isReady ? t.auth_ready : t.auth_missing}
+                  </p>
+                  {authMessage ? <p className="rounded-2xl border border-green-300/20 bg-green-400/10 px-4 py-3 text-green-100">{authMessage}</p> : null}
+                  {authError ? <p className="rounded-2xl border border-red-300/20 bg-red-400/10 px-4 py-3 text-red-100">{authError}</p> : null}
+                </div>
+              </Card>
+            </motion.section>
+          </div>
+        ) : (
+          <>
+            {page === 'home' && (
+              <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+                <Card
+                  title={lang === 'ar' ? 'مرحبًا بك' : 'Welcome back'}
+                  subtitle={profile?.full_name || session?.user?.email || ''}
+                >
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <Stat
+                      label={t.calories_today}
+                      value={`${metrics.caloriesToday}`}
+                      sub={`${t.target}: ${metrics.caloriesTarget}`}
+                    />
+                    <Stat
+                      label={t.water_today}
+                      value={`${metrics.waterToday}`}
+                      sub={`${t.target}: ${metrics.waterTarget}`}
+                    />
+                    <Stat
+                      label={t.latest_weight}
+                      value={`${toNumber(metrics.latestWeight).toFixed(1)} kg`}
+                      sub={`${metrics.latestChange >= 0 ? '+' : ''}${metrics.latestChange.toFixed(1)} kg`}
+                    />
+                    <Stat
+                      label={t.remaining}
+                      value={`${metrics.remainingCalories}`}
+                      sub={lang === 'ar' ? 'سعرة متبقية' : 'kcal left'}
+                    />
+                  </div>
+
+                  <div className="mt-5 rounded-[24px] border border-white/10 bg-white/5 p-5">
+                    <div className="text-sm font-semibold">{lang === 'ar' ? 'ملخّص سريع' : 'Quick summary'}</div>
+                    <p className="mt-2 text-sm leading-7 text-white/65 dark:text-white/65 text-slate-600">
+                      {lang === 'ar'
+                        ? 'تقدر تروح للوحة التحكم لتسجيل الأكل والماء، أو تفتح التقدم لمراجعة الترند الأسبوعي.'
+                        : 'Use the dashboard to log meals and water, or open progress to review the weekly trend.'}
+                    </p>
+                  </div>
+                </Card>
+
+                <Card
+                  title={lang === 'ar' ? 'ملاحظات الواجهة' : 'UI notes'}
+                  subtitle={lang === 'ar' ? 'مناسبة للموبايل والفريمات النظيفة' : 'Mobile-first and polished'}
+                >
+                  <div className="space-y-3">
+                    <div className="rounded-[22px] border border-white/10 bg-white/5 p-4">
+                      <div className="font-semibold">{lang === 'ar' ? 'Minimalist' : 'Minimalist'}</div>
+                      <p className="mt-1 text-sm text-white/65 dark:text-white/65 text-slate-600">
+                        {lang === 'ar' ? 'بدون زحمة عناصر، والواجهة تركز على الفعل فقط.' : 'No clutter; the interface stays focused on the action.'}
+                      </p>
+                    </div>
+                    <div className="rounded-[22px] border border-white/10 bg-white/5 p-4">
+                      <div className="font-semibold">{lang === 'ar' ? 'Glassmorphism' : 'Glassmorphism'}</div>
+                      <p className="mt-1 text-sm text-white/65 dark:text-white/65 text-slate-600">
+                        {lang === 'ar' ? 'بطاقات شفافة مع عمق بصري واضح.' : 'Translucent panels with clear depth and contrast.'}
+                      </p>
+                    </div>
+                    <div className="rounded-[22px] border border-white/10 bg-white/5 p-4">
+                      <div className="font-semibold">{lang === 'ar' ? 'Supabase' : 'Supabase'}</div>
+                      <p className="mt-1 text-sm text-white/65 dark:text-white/65 text-slate-600">
+                        {lang === 'ar' ? 'Auth + database + RLS بدون backend منفصل.' : 'Auth, database, and RLS without a custom backend.'}
+                      </p>
+                    </div>
+                  </div>
+                </Card>
+              </div>
+            )}
+
+            {page === 'dashboard' && (
+              <div className="space-y-6">
+                <div className="grid gap-4 md:grid-cols-4">
+                  <Stat label={t.calories_today} value={`${metrics.caloriesToday}`} sub={`${t.remaining}: ${metrics.remainingCalories}`} />
+                  <Stat label={t.water_today} value={`${metrics.waterToday}`} sub={`${t.target}: ${metrics.waterTarget}`} />
+                  <Stat label={t.latest_weight} value={`${toNumber(metrics.latestWeight).toFixed(1)} kg`} sub={`${metrics.latestChange >= 0 ? '+' : ''}${metrics.latestChange.toFixed(1)} kg`} />
+                  <Stat label={t.bmr} value={`${profile?.bmr ? Math.round(profile.bmr) : calcBmr(profileForm)} kcal`} sub={`${t.tdee}: ${profile?.tdee ? Math.round(profile.tdee) : calcTargets(profileForm).tdee}`} />
+                </div>
+
+                <div className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
+                  <Card title={t.profile} subtitle={t.profile_card}>
+                    <form onSubmit={saveProfile} className="grid gap-4 sm:grid-cols-2">
+                      <Field label={t.full_name}>
+                        <input
+                          className="input bg-white/5 border-white/10 text-white placeholder:text-white/35"
+                          value={profileForm.full_name}
+                          onChange={(e) => setProfileForm((prev) => ({ ...prev, full_name: e.target.value }))}
+                        />
+                      </Field>
+                      <Field label={lang === 'ar' ? 'النوع' : 'Gender'}>
+                        <select
+                          className="input bg-white/5 border-white/10 text-white"
+                          value={profileForm.gender}
+                          onChange={(e) => setProfileForm((prev) => ({ ...prev, gender: e.target.value }))}
+                        >
+                          <option value="male">{lang === 'ar' ? 'ذكر' : 'Male'}</option>
+                          <option value="female">{lang === 'ar' ? 'أنثى' : 'Female'}</option>
+                        </select>
+                      </Field>
+                      <Field label={lang === 'ar' ? 'العمر' : 'Age'}>
+                        <input
+                          type="number"
+                          className="input bg-white/5 border-white/10 text-white"
+                          value={profileForm.age}
+                          onChange={(e) => setProfileForm((prev) => ({ ...prev, age: e.target.value }))}
+                        />
+                      </Field>
+                      <Field label={lang === 'ar' ? 'الطول (سم)' : 'Height (cm)'}>
+                        <input
+                          type="number"
+                          className="input bg-white/5 border-white/10 text-white"
+                          value={profileForm.height_cm}
+                          onChange={(e) => setProfileForm((prev) => ({ ...prev, height_cm: e.target.value }))}
+                        />
+                      </Field>
+                      <Field label={lang === 'ar' ? 'الوزن (كجم)' : 'Weight (kg)'}>
+                        <input
+                          type="number"
+                          className="input bg-white/5 border-white/10 text-white"
+                          value={profileForm.weight_kg}
+                          onChange={(e) => setProfileForm((prev) => ({ ...prev, weight_kg: e.target.value }))}
+                        />
+                      </Field>
+                      <Field label={lang === 'ar' ? 'الوزن المستهدف' : 'Goal weight'}>
+                        <input
+                          type="number"
+                          className="input bg-white/5 border-white/10 text-white"
+                          value={profileForm.goal_weight_kg}
+                          onChange={(e) => setProfileForm((prev) => ({ ...prev, goal_weight_kg: e.target.value }))}
+                        />
+                      </Field>
+                      <Field label={lang === 'ar' ? 'النشاط' : 'Activity'}>
+                        <select
+                          className="input bg-white/5 border-white/10 text-white"
+                          value={profileForm.activity_level}
+                          onChange={(e) => setProfileForm((prev) => ({ ...prev, activity_level: e.target.value }))}
+                        >
+                          {ACTIVITY_LEVELS.map((level) => (
+                            <option key={level.value} value={level.value}>
+                              {level.label[lang]}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+                      <Field label={lang === 'ar' ? 'الهدف' : 'Goal'}>
+                        <select
+                          className="input bg-white/5 border-white/10 text-white"
+                          value={profileForm.goal_type}
+                          onChange={(e) => setProfileForm((prev) => ({ ...prev, goal_type: e.target.value }))}
+                        >
+                          {GOALS.map((goal) => (
+                            <option key={goal.value} value={goal.value}>
+                              {goal.label[lang]}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
+
+                      <div className="sm:col-span-2 grid gap-3 sm:grid-cols-2">
+                        <Stat label={t.calories_target} value={`${calcTargets(profileForm).calories_target}`} />
+                        <Stat label={t.water_target} value={`${calcTargets(profileForm).water_target_cups} cups`} />
+                      </div>
+
+                      <div className="sm:col-span-2 flex flex-wrap gap-3">
+                        <button
+                          type="submit"
+                          disabled={savingProfile}
+                          className="rounded-2xl bg-orange-400 px-5 py-3 font-semibold text-slate-950 transition hover:bg-orange-300 disabled:opacity-60"
+                        >
+                          {savingProfile ? (lang === 'ar' ? 'جارٍ الحفظ...' : 'Saving...') : t.update_profile}
+                        </button>
+                      </div>
+                    </form>
+                  </Card>
+
+                  <div className="space-y-6">
+                    <Card title={t.quick_add} subtitle={lang === 'ar' ? 'اختيارات سريعة للوجبات' : 'Fast meal templates'}>
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        {QUICK_MEALS.map((meal) => (
+                          <button
+                            key={meal.name.en}
+                            onClick={() => fillQuickMeal(meal)}
+                            className="rounded-[22px] border border-white/10 bg-white/5 p-4 text-left transition hover:bg-white/10"
+                          >
+                            <div className="font-semibold">{meal.name[lang]}</div>
+                            <div className="mt-2 text-xs text-white/55 dark:text-white/55 text-slate-500">
+                              {meal.calories} kcal · {meal.protein}P · {meal.carbs}C · {meal.fat}F
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </Card>
+
+                    <Card title={t.log_meal} subtitle={lang === 'ar' ? 'خزن الأكل في Supabase' : 'Store food in Supabase'}>
+                      <form onSubmit={addMeal} className="grid gap-4 sm:grid-cols-2">
+                        <Field label={t.meal_name}>
+                          <input
+                            className="input bg-white/5 border-white/10 text-white placeholder:text-white/35"
+                            value={mealForm.meal_name}
+                            onChange={(e) => setMealForm((prev) => ({ ...prev, meal_name: e.target.value }))}
+                          />
+                        </Field>
+                        <Field label={t.meal_date}>
+                          <input
+                            type="date"
+                            className="input bg-white/5 border-white/10 text-white"
+                            value={mealForm.log_date}
+                            onChange={(e) => setMealForm((prev) => ({ ...prev, log_date: e.target.value }))}
+                          />
+                        </Field>
+                        <Field label={t.meal_calories}>
+                          <input
+                            type="number"
+                            className="input bg-white/5 border-white/10 text-white"
+                            value={mealForm.calories}
+                            onChange={(e) => setMealForm((prev) => ({ ...prev, calories: e.target.value }))}
+                          />
+                        </Field>
+                        <Field label={t.meal_protein}>
+                          <input
+                            type="number"
+                            className="input bg-white/5 border-white/10 text-white"
+                            value={mealForm.protein}
+                            onChange={(e) => setMealForm((prev) => ({ ...prev, protein: e.target.value }))}
+                          />
+                        </Field>
+                        <Field label={t.meal_carbs}>
+                          <input
+                            type="number"
+                            className="input bg-white/5 border-white/10 text-white"
+                            value={mealForm.carbs}
+                            onChange={(e) => setMealForm((prev) => ({ ...prev, carbs: e.target.value }))}
+                          />
+                        </Field>
+                        <Field label={t.meal_fat}>
+                          <input
+                            type="number"
+                            className="input bg-white/5 border-white/10 text-white"
+                            value={mealForm.fat}
+                            onChange={(e) => setMealForm((prev) => ({ ...prev, fat: e.target.value }))}
+                          />
+                        </Field>
+                        <div className="sm:col-span-2">
+                          <button
+                            type="submit"
+                            disabled={savingMeal}
+                            className="rounded-2xl bg-orange-400 px-5 py-3 font-semibold text-slate-950 transition hover:bg-orange-300 disabled:opacity-60"
+                          >
+                            {savingMeal ? (lang === 'ar' ? 'جارٍ الإضافة...' : 'Adding...') : t.log_meal}
+                          </button>
+                        </div>
+                      </form>
+                    </Card>
+
+                    <Card title={t.add_weight} subtitle={lang === 'ar' ? 'سجل الوزن مع التاريخ' : 'Track body weight over time'}>
+                      <form onSubmit={addWeight} className="grid gap-4 sm:grid-cols-2">
+                        <Field label={t.weight}>
+                          <input
+                            type="number"
+                            className="input bg-white/5 border-white/10 text-white"
+                            value={weightForm.weight_kg}
+                            onChange={(e) => setWeightForm((prev) => ({ ...prev, weight_kg: e.target.value }))}
+                          />
+                        </Field>
+                        <Field label={t.meal_date}>
+                          <input
+                            type="date"
+                            className="input bg-white/5 border-white/10 text-white"
+                            value={weightForm.log_date}
+                            onChange={(e) => setWeightForm((prev) => ({ ...prev, log_date: e.target.value }))}
+                          />
+                        </Field>
+                        <div className="sm:col-span-2">
+                          <button
+                            type="submit"
+                            disabled={savingWeight}
+                            className="rounded-2xl bg-white px-5 py-3 font-semibold text-slate-950 transition hover:bg-white/90 disabled:opacity-60"
+                          >
+                            {savingWeight ? (lang === 'ar' ? 'جارٍ الحفظ...' : 'Saving...') : t.add_weight}
+                          </button>
+                        </div>
+                      </form>
+                    </Card>
+                  </div>
+                </div>
+
+                <div className="grid gap-6 lg:grid-cols-2">
+                  <Card title={t.meal_history} subtitle={lang === 'ar' ? 'آخر السجلات في الحساب' : 'Latest entries in the account'}>
+                    <div className="space-y-3">
+                      {meals.length ? (
+                        meals.map((meal) => (
+                          <div key={meal.id} className="flex items-center justify-between gap-4 rounded-[22px] border border-white/10 bg-white/5 p-4">
+                            <div>
+                              <div className="font-semibold">{meal.meal_name}</div>
+                              <div className="mt-1 text-sm text-white/60 dark:text-white/60 text-slate-500">
+                                {formatDate(meal.log_date, lang)} · {meal.calories} kcal
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => deleteMeal(meal.id)}
+                              className="rounded-full border border-white/10 bg-white/10 px-3 py-2 text-xs font-semibold"
+                            >
+                              {lang === 'ar' ? 'حذف' : 'Delete'}
+                            </button>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-sm text-white/55 dark:text-white/55 text-slate-500">{t.no_meals}</p>
+                      )}
+                    </div>
+                  </Card>
+
+                  <Card title={t.weight_history} subtitle={lang === 'ar' ? 'اتجاه الوزن الحالي' : 'Current weight trend'}>
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => updateWater(-1)}
+                          disabled={savingWater}
+                          className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-semibold"
+                        >
+                          {t.remove_water}
+                        </button>
+                        <button
+                          onClick={() => updateWater(1)}
+                          disabled={savingWater}
+                          className="rounded-2xl bg-orange-400 px-4 py-3 text-sm font-semibold text-slate-950"
+                        >
+                          {savingWater ? (lang === 'ar' ? 'جارٍ التحديث...' : 'Updating...') : t.add_water}
+                        </button>
+                      </div>
+
+                      {weights.length ? (
+                        weights.map((entry) => (
+                          <div key={entry.id} className="flex items-center justify-between rounded-[22px] border border-white/10 bg-white/5 p-4">
+                            <div>
+                              <div className="font-semibold">{toNumber(entry.weight_kg).toFixed(1)} kg</div>
+                              <div className="mt-1 text-sm text-white/60 dark:text-white/60 text-slate-500">
+                                {formatDate(entry.log_date, lang)}
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => deleteWeight(entry.id)}
+                              className="rounded-full border border-white/10 bg-white/10 px-3 py-2 text-xs font-semibold"
+                            >
+                              {lang === 'ar' ? 'حذف' : 'Delete'}
+                            </button>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-sm text-white/55 dark:text-white/55 text-slate-500">{t.no_weights}</p>
+                      )}
+                    </div>
+                  </Card>
+                </div>
+              </div>
+            )}
+
+            {page === 'progress' && (
+              <div className="grid gap-6 lg:grid-cols-[1fr_0.9fr]">
+                <Card title={t.weekly_progress} subtitle={`${t.last_7_days} · ${profile?.full_name || session.user.email || ''}`}>
+                  {metrics.weeklyWeights.length ? (
+                    <div className="h-[340px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={metrics.weeklyWeights}>
+                          <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.15} />
+                          <XAxis dataKey="date" tickLine={false} axisLine={false} />
+                          <YAxis tickLine={false} axisLine={false} domain={['auto', 'auto']} />
+                          <Tooltip
+                            contentStyle={{
+                              borderRadius: 18,
+                              border: '1px solid rgba(255,255,255,.12)',
+                              background: 'rgba(10,15,20,.92)',
+                              color: 'white',
+                            }}
+                          />
+                          <Line type="monotone" dataKey="weight" strokeWidth={3} dot={{ r: 4 }} />
+                        </LineChart>
+                      </ResponsiveContainer>
                     </div>
                   ) : (
-                    <ResponsiveContainer width="100%" height={380}>
-                      <LineChart data={weeklyData} margin={{ top: 10, right: 20, left: 0, bottom: 10 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke={theme === 'dark' ? 'rgba(255,255,255,0.12)' : 'rgba(15,23,42,0.10)'} />
-                        <XAxis dataKey="label" tick={{ fill: theme === 'dark' ? '#ffffff99' : '#475569', fontSize: 12 }} />
-                        <YAxis yAxisId="left" tick={{ fill: theme === 'dark' ? '#ffffff99' : '#475569', fontSize: 12 }} />
-                        <YAxis yAxisId="right" orientation="right" tick={{ fill: theme === 'dark' ? '#ffffff99' : '#475569', fontSize: 12 }} />
-                        <Tooltip
-                          contentStyle={{
-                            background: theme === 'dark' ? '#111827' : '#ffffff',
-                            border: theme === 'dark' ? '1px solid rgba(255,255,255,0.12)' : '1px solid rgba(15,23,42,0.08)',
-                            borderRadius: 20,
-                            color: theme === 'dark' ? '#fff' : '#0f172a',
-                          }}
-                        />
-                        <Line yAxisId="left" type="monotone" dataKey="weight" stroke="#FF8C00" strokeWidth={3} dot={{ r: 4 }} name={t.progress.weight} connectNulls />
-                        <Line yAxisId="right" type="monotone" dataKey="calories" stroke="#60a5fa" strokeWidth={3} dot={{ r: 4 }} name={t.progress.calories} />
-                        <Line yAxisId="right" type="monotone" dataKey="water" stroke="#34d399" strokeWidth={3} dot={{ r: 4 }} name={t.progress.water} />
-                      </LineChart>
-                    </ResponsiveContainer>
+                    <div className="rounded-[24px] border border-white/10 bg-white/5 p-6 text-sm text-white/65 dark:text-white/65 text-slate-600">
+                      {lang === 'ar'
+                        ? 'أضف أول وزن في لوحة التحكم ليظهر الترند هنا.'
+                        : 'Add your first weight entry in the dashboard to show the trend here.'}
+                    </div>
                   )}
-                </div>
+                </Card>
 
-                <div className="grid gap-4">
-                  <MetricCard label={t.progress.trend} value={`${trend > 0 ? '+' : ''}${trend.toFixed(1)} kg`} theme={theme} accent />
-                  <MetricCard label={t.progress.latestWeight} value={`${weightLatest} kg`} theme={theme} />
-                  <MetricCard label={t.progress.todayWater} value={`${(waterToday / 1000).toFixed(1)} L`} theme={theme} />
-                  <div className={`rounded-[1.5rem] border p-5 ${lineCard}`}>
-                    <div className={`text-sm leading-7 ${mutedText}`}>
-                      {lang === 'ar'
-                        ? 'الرسمة هنا بتوضح الاتجاه من أول بيانات مسجلة لآخر بيانات، وده أوضح من رقم واحد منفصل.'
-                        : 'The chart shows direction across the full week, which is more useful than a single isolated number.'}
+                <div className="space-y-6">
+                  <Card title={t.profile_card} subtitle={lang === 'ar' ? 'أرقام الحساب الحالية' : 'Current account numbers'}>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <Stat label={t.calories_target} value={`${metrics.caloriesTarget}`} />
+                      <Stat label={t.water_target} value={`${metrics.waterTarget} cups`} />
+                      <Stat label={t.bmr} value={`${profile?.bmr ? Math.round(profile.bmr) : calcBmr(profileForm)}`} />
+                      <Stat label={t.tdee} value={`${profile?.tdee ? Math.round(profile.tdee) : calcTargets(profileForm).tdee}`} />
                     </div>
-                  </div>
+                  </Card>
+
+                  <Card title={t.quick_note} subtitle={lang === 'ar' ? 'ملخص اليوم' : 'Today summary'}>
+                    <div className="space-y-3 text-sm leading-7 text-white/70 dark:text-white/70 text-slate-600">
+                      <p>
+                        {lang === 'ar'
+                          ? `سعرات اليوم ${metrics.caloriesToday} من هدف ${metrics.caloriesTarget}.`
+                          : `Today is ${metrics.caloriesToday} of ${metrics.caloriesTarget} calories.`}
+                      </p>
+                      <p>
+                        {lang === 'ar'
+                          ? `الماء المسجل ${metrics.waterToday} كوب من هدف ${metrics.waterTarget}.`
+                          : `Water logged: ${metrics.waterToday} cups out of ${metrics.waterTarget}.`}
+                      </p>
+                      <p>
+                        {lang === 'ar'
+                          ? `آخر وزن ${toNumber(metrics.latestWeight).toFixed(1)} كجم.`
+                          : `Latest weight: ${toNumber(metrics.latestWeight).toFixed(1)} kg.`}
+                      </p>
+                    </div>
+                  </Card>
                 </div>
               </div>
-            </section>
-          )}
+            )}
 
-          {page === 'settings' && (
-            <section className={`rounded-[1.75rem] border p-5 sm:p-6 ${cardShell}`}>
-              <SectionHeading
-                eyebrow={t.nav.settings}
-                title={t.settings.title}
-                description={t.settings.description}
-                theme={theme}
-              />
-
-              <div className="mt-6 grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
-                <div className={`rounded-[1.5rem] border p-5 ${lineCard}`}>
+            {page === 'settings' && (
+              <div className="grid gap-6 lg:grid-cols-[1fr_0.8fr]">
+                <Card title={t.settings} subtitle={lang === 'ar' ? 'المظهر والملف والحساب' : 'Theme, profile, and account'}>
                   <div className="grid gap-4 sm:grid-cols-2">
-                    <div>
-                      <label className="label">{t.settings.name}</label>
-                      <input className={`input ${inputShell}`} value={state.profile.name} onChange={(e) => setState((prev) => ({ ...prev, profile: { ...prev.profile, name: e.target.value } }))} />
-                    </div>
-                    <div>
-                      <label className="label">{t.settings.gender}</label>
-                      <select className={`input ${inputShell}`} value={state.profile.gender} onChange={(e) => setState((prev) => ({ ...prev, profile: { ...prev.profile, gender: e.target.value } }))}>
-                        <option value="male">{lang === 'ar' ? 'ذكر' : 'Male'}</option>
-                        <option value="female">{lang === 'ar' ? 'أنثى' : 'Female'}</option>
+                    <Field label={t.theme}>
+                      <select
+                        className="input bg-white/5 border-white/10 text-white"
+                        value={theme}
+                        onChange={(e) => setTheme(e.target.value)}
+                      >
+                        <option value="dark">{t.dark}</option>
+                        <option value="light">{t.light}</option>
                       </select>
-                    </div>
-                    <div>
-                      <label className="label">{t.settings.age}</label>
-                      <input type="number" className={`input ${inputShell}`} value={state.profile.age} onChange={(e) => setState((prev) => ({ ...prev, profile: { ...prev.profile, age: e.target.value } }))} />
-                    </div>
-                    <div>
-                      <label className="label">{t.settings.activity}</label>
-                      <select className={`input ${inputShell}`} value={state.profile.activity} onChange={(e) => setState((prev) => ({ ...prev, profile: { ...prev.profile, activity: e.target.value } }))}>
-                        {ACTIVITY_LEVELS.map((level) => (
-                          <option key={level.value} value={level.value}>{lang === 'ar' ? level.ar : level.en}</option>
-                        ))}
+                    </Field>
+                    <Field label={t.language}>
+                      <select
+                        className="input bg-white/5 border-white/10 text-white"
+                        value={lang}
+                        onChange={(e) => setLang(e.target.value)}
+                      >
+                        <option value="ar">AR</option>
+                        <option value="en">EN</option>
                       </select>
-                    </div>
-                    <div>
-                      <label className="label">{t.settings.height}</label>
-                      <input type="number" className={`input ${inputShell}`} value={state.profile.height} onChange={(e) => setState((prev) => ({ ...prev, profile: { ...prev.profile, height: e.target.value } }))} />
-                    </div>
-                    <div>
-                      <label className="label">{t.settings.weight}</label>
-                      <input type="number" className={`input ${inputShell}`} value={state.profile.weight} onChange={(e) => setState((prev) => ({ ...prev, profile: { ...prev.profile, weight: e.target.value } }))} />
-                    </div>
-                    <div>
-                      <label className="label">{t.settings.goalWeight}</label>
-                      <input type="number" className={`input ${inputShell}`} value={state.profile.goalWeight} onChange={(e) => setState((prev) => ({ ...prev, profile: { ...prev.profile, goalWeight: e.target.value } }))} />
-                    </div>
-                    <div>
-                      <label className="label">{t.settings.goal}</label>
-                      <select className={`input ${inputShell}`} value={state.profile.goal} onChange={(e) => setState((prev) => ({ ...prev, profile: { ...prev.profile, goal: e.target.value } }))}>
-                        {GOALS.map((item) => (
-                          <option key={item.value} value={item.value}>{lang === 'ar' ? item.ar : item.en}</option>
-                        ))}
-                      </select>
-                    </div>
+                    </Field>
                   </div>
 
-                  <div className="mt-5 flex flex-wrap gap-3">
-                    <button type="button" onClick={saveProfile} className="rounded-full bg-brand-primary px-5 py-3 text-sm font-bold text-black transition hover:opacity-90">
-                      {t.settings.save}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={toggleTheme}
-                      className={`rounded-full border px-5 py-3 text-sm font-bold transition ${
-                        theme === 'dark' ? 'border-white/10 bg-white/5 text-white' : 'border-slate-200 bg-white text-slate-800'
-                      }`}
-                    >
-                      {theme === 'dark' ? '🌙 Dark' : '☀️ Light'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setLang((prev) => (prev === 'ar' ? 'en' : 'ar'))}
-                      className={`rounded-full border px-5 py-3 text-sm font-bold transition ${
-                        theme === 'dark' ? 'border-white/10 bg-white/5 text-white' : 'border-slate-200 bg-white text-slate-800'
-                      }`}
-                    >
-                      {lang === 'ar' ? 'EN' : 'AR'}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="space-y-5">
-                  <div className={`rounded-[1.5rem] border p-5 ${lineCard}`}>
-                    <div className={`text-xs font-bold uppercase tracking-[0.25em] ${mutedText}`}>{t.settings.profileCard}</div>
-                    <div className={`mt-2 text-2xl font-black ${strongText}`}>{state.profile.name}</div>
-                    <div className={`mt-4 grid gap-3 sm:grid-cols-2`}>
-                      <MetricCard label={t.settings.bmr} value={bmr} theme={theme} />
-                      <MetricCard label={t.settings.tdee} value={tdee} theme={theme} />
-                      <MetricCard label={t.settings.caloriesTarget} value={targetCalories} theme={theme} />
-                      <MetricCard label={t.settings.waterTarget} value={`${waterGoal} ml`} theme={theme} />
-                    </div>
+                  <div className="mt-6 grid gap-4 sm:grid-cols-2">
+                    <Stat label={t.profile_card} value={profile?.full_name || session.user.email || '-'} />
+                    <Stat label={t.auth_ready} value={isReady ? 'Yes' : 'No'} />
                   </div>
 
-                  <div className={`rounded-[1.5rem] border p-5 ${lineCard}`}>
-                    <div className={`text-sm leading-7 ${mutedText}`}>
+                  <div className="mt-6 rounded-[24px] border border-white/10 bg-white/5 p-5">
+                    <div className="text-sm font-semibold">{lang === 'ar' ? 'كيف تربطه على Vercel' : 'Vercel deployment'}</div>
+                    <p className="mt-2 text-sm leading-7 text-white/65 dark:text-white/65 text-slate-600">
                       {lang === 'ar'
-                        ? 'الملف الشخصي هنا منفصل عن المحتوى الرئيسي، والهدف ينعكس على الحسابات مباشرة.'
-                        : 'The profile is separate from the main content, and the chosen goal directly affects the calculations.'}
-                    </div>
+                        ? 'ارفع الواجهة على Vercel، واضبط متغيرات البيئة VITE_SUPABASE_URL و VITE_SUPABASE_ANON_KEY.'
+                        : 'Deploy the frontend on Vercel and add VITE_SUPABASE_URL plus VITE_SUPABASE_ANON_KEY as environment variables.'}
+                    </p>
                   </div>
-                </div>
-              </div>
-            </section>
-          )}
-        </main>
+                </Card>
 
-        <footer className={`mt-4 rounded-[1.5rem] border p-5 sm:p-6 ${cardShell}`}>
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <div className="text-lg font-black text-brand-primary">{t.nav.brand}</div>
-              <p className={`mt-2 max-w-2xl text-sm leading-7 ${mutedText}`}>{t.footer.note}</p>
-            </div>
-            <div className={`text-sm ${mutedText}`}>© 2026 — {t.footer.rights}</div>
-          </div>
+                <Card title={t.auth_success} subtitle={lang === 'ar' ? 'Supabase Auth' : 'Supabase Auth'}>
+                  <div className="space-y-4">
+                    <div className="rounded-[24px] border border-white/10 bg-white/5 p-5 text-sm leading-7 text-white/70 dark:text-white/70 text-slate-600">
+                      {t.auth_hint}
+                    </div>
+                    <div className="rounded-[24px] border border-orange-300/20 bg-orange-400/10 p-5 text-sm leading-7 text-orange-50">
+                      {t.google_note}
+                    </div>
+                    {authMessage ? <p className="rounded-[24px] border border-green-300/20 bg-green-400/10 p-4 text-green-100">{authMessage}</p> : null}
+                    {authError ? <p className="rounded-[24px] border border-red-300/20 bg-red-400/10 p-4 text-red-100">{authError}</p> : null}
+                  </div>
+                </Card>
+              </div>
+            )}
+          </>
+        )}
+
+        <footer className="mt-8 border-t border-white/10 pt-5 text-center text-sm text-white/45 dark:text-white/45 text-slate-500">
+          {lang === 'ar'
+            ? 'Glow Up مبني بأسلوب واضح: واجهة خفيفة، حسابات منفصلة، وتخزين على Supabase.'
+            : 'Glow Up is built with a clean interface, separate user accounts, and Supabase-backed storage.'}
         </footer>
-      </div>
+      </main>
+
+      {initializing ? (
+        <div className="pointer-events-none fixed inset-0 z-40 flex items-center justify-center bg-slate-950/35 backdrop-blur-[2px]">
+          <div className="rounded-3xl border border-white/10 bg-black/40 px-5 py-4 text-sm font-medium text-white shadow-glass">
+            {lang === 'ar' ? 'جاري تحميل الجلسة...' : 'Loading session...'}
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }
+
+export default App
