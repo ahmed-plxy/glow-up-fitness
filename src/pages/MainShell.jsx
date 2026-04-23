@@ -411,6 +411,14 @@ function useWeeklySummary(meals, water, weights, targetCalories, profile) {
   }, [meals, water, weights, profile.weight])
 }
 
+function HomeTab({ profile, targetCalories, meals, water, weights, settings }) {
+  const today = new Date().toISOString().slice(0, 10)
+  const todayMeals = meals.filter((entry) => entry.date.slice(0, 10) === today)
+  const calories = sumMealCalories(todayMeals)
+  const remaining = Math.max(0, targetCalories - calories)
+  const waterTarget = calculateWaterNeed(profile)
+  const waterToday = water.filter((entry) => entry.date.slice(0, 10) === today).reduce((sum, entry) => sum + Number(entry.amount || 0), 0)
+
   const weightSeries = makeSeriesFromEntries(weights.slice(0, 12).reverse(), 'weight').map((item) => ({
     name: formatDateShort(item.date),
     الوزن: item.value,
@@ -1072,7 +1080,7 @@ export default function MainShell({ session, initialProfile = {}, onLogout, them
             exit={{ opacity: 0, x: -18 }}
             transition={{ duration: 0.22 }}
           >
-            {activeTab === 'home' ? <M profile={profile} targetCalories={targetCalories} meals={meals} water={water} weights={weights} settings={settings} /> : null}
+            {activeTab === 'home' ? <HomeTab profile={profile} targetCalories={targetCalories} meals={meals} water={water} weights={weights} settings={settings} /> : null}
             {activeTab === 'log' ? <DailyLog userId={userId} profile={profile} targetCalories={targetCalories} meals={meals} setMeals={setMeals} water={water} setWater={setWater} /> : null}
             {activeTab === 'plans' ? <PlansTab profile={profile} setProfile={setProfile} /> : null}
             {activeTab === 'profile' ? <ProfileTab user={user} profile={profile} setProfile={setProfile} theme={theme} toggleTheme={toggleTheme} onLogout={onLogout} onSaveWeight={handleSaveWeight} weights={weights} onOpenSettings={() => setSettingsOpen(true)} /> : null}
