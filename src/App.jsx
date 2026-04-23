@@ -50,7 +50,7 @@ function AuthCard({ mode, setMode, loading, onSubmit, onGoogle, error, message }
 
           <div className="mt-8 grid gap-4 sm:grid-cols-3">
             <Feature title="حساب احتياجك اليومي" text="يمكنك حساب احتياجك اليومي من الغذاء والسعرات حسب عمرك وجسمك" />
-            <Feature title="متابعة تقدمك الاسبوعي" text="يمكنك متالعهة تقدمك الاسبوعي عن طريق لوحة بيانات ذكية" />
+            <Feature title="متابعة تقدمك الاسبوعي" text="يمكنك متابعة تقدمك الاسبوعي عن طريق لوحة بيانات ذكية" />
             <Feature title="تتبع شرب المياه " text="يمكنك تتبع شربك للمياه علي مدار اليوم" />
           </div>
         </div>
