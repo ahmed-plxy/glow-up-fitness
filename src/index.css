@@ -24,8 +24,8 @@ body {
 body[data-theme='dark'] {
   color: white;
   background-image:
-    radial-gradient(circle at top, rgba(255, 140, 0, 0.18), transparent 28%),
-    radial-gradient(circle at bottom left, rgba(245, 235, 221, 0.08), transparent 24%),
+    radial-gradient(circle at top, rgba(255, 140, 0, 0.16), transparent 28%),
+    radial-gradient(circle at bottom left, rgba(245, 235, 221, 0.1), transparent 24%),
     linear-gradient(180deg, #0b0f14 0%, #06080b 100%);
   background-color: #0b0f14;
 }
@@ -40,7 +40,7 @@ body[data-theme='light'] {
 }
 
 .glass {
-  @apply backdrop-blur-xl shadow-glass border border-white/10;
+  @apply backdrop-blur-xl shadow-glass;
 }
 
 .input {
