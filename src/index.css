@@ -39,22 +39,17 @@ body[data-theme='light'] {
   background-color: #f8fafc;
 }
 
-.glass {
-  @apply backdrop-blur-xl shadow-glass;
+* {
+  box-sizing: border-box;
 }
 
-.input {
-  @apply w-full rounded-2xl border px-4 py-3 text-sm outline-none transition;
+button,
+input,
+select,
+textarea {
+  font: inherit;
 }
 
-.label {
-  @apply mb-2 block text-sm font-medium;
-}
-
-.card-title {
-  @apply text-lg font-semibold tracking-tight;
-}
-
-.muted {
-  @apply text-white/70;
+::selection {
+  background: rgba(245, 235, 221, 0.28);
 }

@@ -1,9 +1,17 @@
-import React, { useEffect, useState } from 'react'
-import AuthCard from './components/AuthCard'
-import AppShell from './components/AppShell'
-import { supabase, supabaseConfigReady } from './lib/supabase'
+import React, { useEffect, useMemo, useState } from 'react'
+import { supabase, supabaseConfigReady } from './supabaseClient'
+import AuthPage from './pages/AuthPage'
+import DashboardPage from './pages/DashboardPage'
+import { getTheme, setTheme } from './lib/storage'
 
-const STORAGE_THEME = 'glow-theme'
+const CARD_BG = 'rounded-[1.75rem] border border-white/10 bg-white/5 shadow-2xl shadow-black/20 backdrop-blur-xl'
+
+function applyTheme(theme) {
+  if (typeof document === 'undefined') return
+  document.documentElement.setAttribute('data-theme', theme)
+  document.body.setAttribute('data-theme', theme)
+  setTheme(theme)
+}
 
 export default function App() {
   const [session, setSession] = useState(null)
@@ -12,16 +20,11 @@ export default function App() {
   const [mode, setMode] = useState('signIn')
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
-  const [theme, setTheme] = useState(() => {
-    if (typeof window === 'undefined') return 'dark'
-    return window.localStorage.getItem(STORAGE_THEME) || 'dark'
-  })
+  const [theme, setThemeState] = useState(() => getTheme())
+  const [activeTab, setActiveTab] = useState('profile')
 
   useEffect(() => {
-    if (typeof document === 'undefined') return
-    document.documentElement.dataset.theme = theme
-    document.body.dataset.theme = theme
-    window.localStorage.setItem(STORAGE_THEME, theme)
+    applyTheme(theme)
   }, [theme])
 
   useEffect(() => {
@@ -36,7 +39,9 @@ export default function App() {
       .getSession()
       .then(({ data, error: sessionError }) => {
         if (!mounted) return
-        if (sessionError) setError(sessionError.message)
+        if (sessionError) {
+          setError(sessionError.message)
+        }
         setSession(data.session ?? null)
       })
       .finally(() => {
@@ -53,6 +58,10 @@ export default function App() {
       listener?.subscription?.unsubscribe?.()
     }
   }, [])
+
+  const toggleTheme = () => {
+    setThemeState((current) => (current === 'dark' ? 'light' : 'dark'))
+  }
 
   const handleEmailAuth = async ({ email, password, fullName, mode: selectedMode }) => {
     if (!supabase) return
@@ -101,10 +110,9 @@ export default function App() {
     try {
       const { error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: {
-          redirectTo: window.location.origin,
-        },
+        options: { redirectTo: window.location.origin },
       })
+
       if (oauthError) throw oauthError
     } catch (err) {
       setError(err?.message || 'تعذر بدء تسجيل الدخول عبر جوجل.')
@@ -117,15 +125,18 @@ export default function App() {
     await supabase.auth.signOut()
     setSession(null)
     setMessage('تم تسجيل الخروج.')
+    setActiveTab('profile')
   }
 
   if (!supabaseConfigReady) {
     return (
       <div className="flex min-h-screen items-center justify-center px-4 py-10 text-white">
-        <div className="rounded-[1.75rem] border border-white/10 bg-white/6 p-8 shadow-2xl shadow-black/20 backdrop-blur-xl w-full max-w-2xl">
-          <div className="text-xs font-semibold uppercase tracking-[0.25em] text-amber-200/80">إعدادات غير مكتملة</div>
-          <h1 className="mt-4 text-3xl font-black">متغيرات المصادقة غير موجودة</h1>
-          <p className="mt-3 text-sm leading-7 text-white/70">أضف عنوان المشروع والمفتاح العام داخل البيئة المحلية أو الاستضافة حتى تعمل صفحة الدخول.</p>
+        <div className={`${CARD_BG} w-full max-w-2xl p-8`}>
+          <div className="text-xs font-semibold uppercase tracking-[0.25em] text-amber-200/80">الإعدادات ناقصة</div>
+          <h1 className="mt-4 text-3xl font-black">متغيرات الربط غير مكتملة</h1>
+          <p className="mt-3 text-sm leading-7 text-white/70">
+            أضف متغيري الربط في بيئة التشغيل أو الملف المحلي: VITE_SUPABASE_URL و VITE_SUPABASE_ANON_KEY.
+          </p>
         </div>
       </div>
     )
@@ -134,7 +145,7 @@ export default function App() {
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center px-4 py-10 text-white">
-        <div className="rounded-[1.75rem] border border-white/10 bg-white/6 p-8 shadow-2xl shadow-black/20 backdrop-blur-xl flex w-full max-w-md items-center justify-center">
+        <div className={`${CARD_BG} flex w-full max-w-md items-center justify-center p-8`}>
           <div className="animate-pulse text-lg font-bold text-white/80">جارٍ التحقق من الجلسة...</div>
         </div>
       </div>
@@ -142,10 +153,25 @@ export default function App() {
   }
 
   return session ? (
-    <AppShell session={session} theme={theme} setTheme={setTheme} onLogout={handleLogout} />
+    <DashboardPage
+      key={session?.user?.id || 'dashboard'}
+      session={session}
+      activeTab={activeTab}
+      setActiveTab={setActiveTab}
+      theme={theme}
+      toggleTheme={toggleTheme}
+      onLogout={handleLogout}
+    />
   ) : (
-    <div className="flex min-h-screen items-center justify-center px-4 py-6 text-white sm:px-6 lg:px-8">
-      <AuthCard mode={mode} setMode={setMode} loading={authLoading} onSubmit={handleEmailAuth} onGoogle={handleGoogleAuth} error={error} message={message} />
-    </div>
+    <AuthPage
+      key='auth'
+      mode={mode}
+      setMode={setMode}
+      loading={authLoading}
+      onSubmit={handleEmailAuth}
+      onGoogle={handleGoogleAuth}
+      error={error}
+      message={message}
+    />
   )
 }
