@@ -41,6 +41,18 @@ export function getWaterKey(userId) {
   return `${PREFIX}:water:${userId}`
 }
 
+export function getMealsKey(userId) {
+  return `${PREFIX}:meals:${userId}`
+}
+
+export function getOnboardingKey(userId) {
+  return `${PREFIX}:onboarding:${userId}`
+}
+
+export function getSettingsKey(userId) {
+  return `${PREFIX}:settings:${userId}`
+}
+
 export function loadProfile(userId, fallback = {}) {
   return readJSON(getProfileKey(userId), fallback)
 }
@@ -59,7 +71,7 @@ export function saveWeightEntries(userId, entries) {
 
 export function appendWeightEntry(userId, entry) {
   const current = loadWeightEntries(userId)
-  const next = [entry, ...current].slice(0, 100)
+  const next = [entry, ...current].slice(0, 120)
   saveWeightEntries(userId, next)
   return next
 }
@@ -74,7 +86,45 @@ export function saveWaterEntries(userId, entries) {
 
 export function appendWaterEntry(userId, entry) {
   const current = loadWaterEntries(userId)
-  const next = [entry, ...current].slice(0, 100)
+  const next = [entry, ...current].slice(0, 120)
   saveWaterEntries(userId, next)
   return next
+}
+
+export function loadMealEntries(userId) {
+  return readJSON(getMealsKey(userId), [])
+}
+
+export function saveMealEntries(userId, entries) {
+  writeJSON(getMealsKey(userId), entries)
+}
+
+export function appendMealEntry(userId, entry) {
+  const current = loadMealEntries(userId)
+  const next = [entry, ...current].slice(0, 200)
+  saveMealEntries(userId, next)
+  return next
+}
+
+export function removeMealEntry(userId, id) {
+  const current = loadMealEntries(userId)
+  const next = current.filter((item) => item.id !== id)
+  saveMealEntries(userId, next)
+  return next
+}
+
+export function loadOnboardingState(userId, fallback = null) {
+  return readJSON(getOnboardingKey(userId), fallback)
+}
+
+export function saveOnboardingState(userId, state) {
+  writeJSON(getOnboardingKey(userId), state)
+}
+
+export function loadSettings(userId, fallback = {}) {
+  return readJSON(getSettingsKey(userId), fallback)
+}
+
+export function saveSettings(userId, settings) {
+  writeJSON(getSettingsKey(userId), settings)
 }
