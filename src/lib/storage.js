@@ -4,11 +4,22 @@ function hasWindow() {
   return typeof window !== 'undefined'
 }
 
+function normalizeFallback(parsed, fallback) {
+  if (parsed === null || parsed === undefined) return fallback
+  if (Array.isArray(fallback)) return Array.isArray(parsed) ? parsed : fallback
+  if (fallback && typeof fallback === "object") {
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : fallback
+  }
+  return parsed
+}
+
 function readJSON(key, fallback) {
   if (!hasWindow()) return fallback
   try {
     const raw = window.localStorage.getItem(key)
-    return raw ? JSON.parse(raw) : fallback
+    if (!raw) return fallback
+    const parsed = JSON.parse(raw)
+    return normalizeFallback(parsed, fallback)
   } catch {
     return fallback
   }
