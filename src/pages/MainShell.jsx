@@ -881,23 +881,24 @@ export default function MainShell({ session, initialProfile = {}, onLogout, them
   const userId = user?.id || user?.email || 'guest'
   const fallbackName = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split('@')[0] || 'مستخدم'
 
+  const storedProfile = loadProfile(userId, {})
   const baseProfile = useMemo(() => ({
-    name: initialProfile.name || loadProfile(userId, {}).name || fallbackName,
-    age: Number(initialProfile.age || loadProfile(userId, {}).age || 26),
-    gender: initialProfile.gender || loadProfile(userId, {}).gender || 'male',
-    height: Number(initialProfile.height || loadProfile(userId, {}).height || 175),
-    weight: Number(initialProfile.weight || loadProfile(userId, {}).weight || 75),
-    activity: initialProfile.activity || loadProfile(userId, {}).activity || 'moderate',
-    goal: initialProfile.goal || loadProfile(userId, {}).goal || 'maintain',
-    units: initialProfile.units || loadProfile(userId, {}).units || 'metric',
-    theme: initialProfile.theme || loadProfile(userId, {}).theme || 'dark',
-    notifications: initialProfile.notifications ?? loadProfile(userId, {}).notifications ?? true,
-    waterReminder: initialProfile.waterReminder ?? loadProfile(userId, {}).waterReminder ?? true,
-    stepGoal: initialProfile.stepGoal || loadProfile(userId, {}).stepGoal || 8000,
-    currentSteps: initialProfile.currentSteps || loadProfile(userId, {}).currentSteps || 0,
-    bedtime: initialProfile.bedtime || loadProfile(userId, {}).bedtime || '23:00',
-    wakeTime: initialProfile.wakeTime || loadProfile(userId, {}).wakeTime || '07:00',
-  }), [userId, initialProfile, fallbackName])
+    name: initialProfile.name || storedProfile.name || fallbackName,
+    age: Number(initialProfile.age || storedProfile.age || 26),
+    gender: initialProfile.gender || storedProfile.gender || 'male',
+    height: Number(initialProfile.height || storedProfile.height || 175),
+    weight: Number(initialProfile.weight || storedProfile.weight || 75),
+    activity: initialProfile.activity || storedProfile.activity || 'moderate',
+    goal: initialProfile.goal || storedProfile.goal || 'maintain',
+    units: initialProfile.units || storedProfile.units || 'metric',
+    theme: initialProfile.theme || storedProfile.theme || 'dark',
+    notifications: initialProfile.notifications ?? storedProfile.notifications ?? true,
+    waterReminder: initialProfile.waterReminder ?? storedProfile.waterReminder ?? true,
+    stepGoal: initialProfile.stepGoal || storedProfile.stepGoal || 8000,
+    currentSteps: initialProfile.currentSteps || storedProfile.currentSteps || 0,
+    bedtime: initialProfile.bedtime || storedProfile.bedtime || '23:00',
+    wakeTime: initialProfile.wakeTime || storedProfile.wakeTime || '07:00',
+  }), [userId, initialProfile, fallbackName, storedProfile])
 
   const [activeTab, setActiveTab] = useState('home')
   const [profile, setProfile] = useState(baseProfile)
